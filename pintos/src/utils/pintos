@@ -400,7 +400,8 @@ sub run_bochs {
     # Write bochsrc.txt configuration file.
     open (BOCHSRC, ">", "bochsrc.txt") or die "bochsrc.txt: create: $!\n";
     print BOCHSRC <<EOF;
-romimage: file=\$BXSHARE/BIOS-bochs-latest, address=0xf0000
+# romimage: file=\$BXSHARE/BIOS-bochs-latest, address=0xf0000
+romimage: file=\$BXSHARE/BIOS-bochs-latest
 vgaromimage: file=\$BXSHARE/VGABIOS-lgpl-latest
 boot: disk
 cpu: ips=1000000
@@ -845,7 +846,7 @@ sub get_load_average {
 # Calls setitimer to set a timeout, then execs what was passed to us.
 sub exec_setitimer {
     if (defined $timeout) {
-	if ($ ge 5.8.0) {
+	if ($\x16 ge 5.8.0) {
 	    eval "
               use Time::HiRes qw(setitimer ITIMER_VIRTUAL);
               setitimer (ITIMER_VIRTUAL, $timeout, 0);
