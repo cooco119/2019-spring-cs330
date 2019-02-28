@@ -1,0 +1,12 @@
+Prototype mismatch: sub main::SIGVTALRM () vs none at /home/ubuntu/2019-spring-cs330/pintos/src/utils/pintos line 872.
+Constant subroutine SIGVTALRM redefined at /home/ubuntu/2019-spring-cs330/pintos/src/utils/pintos line 864.
+Use of uninitialized value $\ in repeat (x) at /home/ubuntu/2019-spring-cs330/pintos/src/utils/pintos line 848.
+Can't exec "setitimer-helper": No such file or directory at /home/ubuntu/2019-spring-cs330/pintos/src/utils/pintos line 854.
+warning: setitimer-helper is not installed, so CPU time limit will not be enforced
+00000000000i[     ] reading configuration from bochsrc.txt
+00000000000i[     ] installing nogui module as the Bochs GUI
+00000000000i[     ] using log file bochsout.txt
+========================================================================
+Bochs is exiting with the following message:
+[MEM0 ] ROM: System BIOS must end at 0xfffff
+========================================================================
