@@ -259,8 +259,7 @@ sub prepare_scratch_disk {
     extend_disk ($disks{SCRATCH}, @gets * 1024 * 1024) if @gets;
 }
 
-# Read "get" files f
- the scratch disk.
+# Read "get" files from the scratch disk.
 sub finish_scratch_disk {
     # We need to start reading the scratch disk from the beginning again.
     if (@gets) {
@@ -401,9 +400,7 @@ sub run_bochs {
     # Write bochsrc.txt configuration file.
     open (BOCHSRC, ">", "bochsrc.txt") or die "bochsrc.txt: create: $!\n";
     print BOCHSRC <<EOF;
-
-#romimage: file=\$BXSHARE/BIOS-bochs-latest, address=0xf0000
-romimage: file=\$BXSHARE/BIOS-bochs-latest
+romimage: file=\$BXSHARE/BIOS-bochs-latest, address=0xf0000
 vgaromimage: file=\$BXSHARE/VGABIOS-lgpl-latest
 boot: disk
 cpu: ips=1000000
@@ -848,7 +845,7 @@ sub get_load_average {
 # Calls setitimer to set a timeout, then execs what was passed to us.
 sub exec_setitimer {
     if (defined $timeout) {
-	if ($\x16 ge 5.8.0) {
+	if ($ ge 5.8.0) {
 	    eval "
               use Time::HiRes qw(setitimer ITIMER_VIRTUAL);
               setitimer (ITIMER_VIRTUAL, $timeout, 0);
