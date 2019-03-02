@@ -29,9 +29,6 @@ static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 
-/* List of processes in THREAD_BLOCK state */
-static struct list block_list;
-
 /* Sets up the 8254 Programmable Interval Timer (PIT) to
    interrupt PIT_FREQ times per second, and registers the
    corresponding interrupt. */
@@ -47,8 +44,6 @@ timer_init (void)
   outb (0x40, count >> 8);
 
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
-
-  list_init (&block_list);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -97,32 +92,18 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
-bool compare_priority (struct list_elem *a,
-                       struct list_elem *b,
-                       void *aux){
-  struct thread *A = list_entry(a, struct thread, elem);
-  struct thread *B = list_entry(b, struct thread, elem);
-
-  if (A->priority > B->priority)
-    return true;
-  else 
-    return false;
-}
-
 /* Suspends execution for approximately TICKS timer ticks. */
 void
 timer_sleep (int64_t ticks) 
 {
   int64_t start = timer_ticks ();
-  enum intr_level old_level;
+  int64_t i = 0;
 
   ASSERT (intr_get_level () == INTR_ON);
-  struct thread *t = thread_current();
-  t->block_end_tick = start + ticks;
-  list_insert_ordered(&block_list, &t->elem, &compare_priority, NULL);
-  old_level = intr_disable();
-  thread_block();
-  intr_set_level (old_level);
+  while (timer_elapsed (start) < ticks) {
+    printf(i++);
+    thread_yield ();
+  }
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -153,56 +134,11 @@ timer_print_stats (void)
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
 
-
-void print_block_list_priority(struct list *l){
-  struct thread *t;
-  struct list_elem *e;
-  if (!list_empty(l)){
-    printf("Block List priorities: ");
-    for (e = list_begin(l); e != list_end(l); e = e->next){
-      t = list_entry(e, struct thread, elem);
-      if (e != NULL)
-        printf("%d, ", t->priority);
-    }
-    printf("\n");
-  }
-  else 
-    printf("List empty.\n");
-}
-
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
-  struct thread *t;
-  struct thread *before;
-  int low_priority_add_tick = 10;
-  int i = 0;
-  struct list_elem *e;
-  enum intr_level old_level;
-  old_level = intr_disable();
-  
-  if (! list_empty(&block_list) && t == idle_thread){
-    for (e = list_begin(&block_list)->next; e != list_end(&block_list); e = e->next){
-      t = list_entry (e, struct thread, elem);
-      before = list_entry (e->prev, struct thread, elem);
-      if (before->priority > t->priority)
-        t->block_end_tick = before->block_end_tick + 10;
-    }
-    for (e = list_begin(&block_list); e != list_end(&block_list); ){
-      t = list_entry (e, struct thread, elem);
-      // Check if blocked and sleep time passed.
-      if (t->block_end_tick <= ticks){
-        e = list_remove(e);
-        thread_unblock(t);
-      }
-      else{
-        e = e->next;
-      }
-    }
-  }
-  intr_set_level(old_level);
   thread_tick ();
 }
 
