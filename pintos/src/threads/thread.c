@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -87,6 +88,34 @@ static tid_t allocate_tid (void);
    finishes. */
 
 /* This is 2016 spring cs330 skeleton code */
+
+void print_block_list_priority(struct list *l){
+  struct thread *t;
+  struct list_elem *e;
+  if (!list_empty(l)){
+    printf("Block List priorities: ");
+    for (e = list_begin(l); e != list_end(l); e = e->next){
+      t = list_entry(e, struct thread, elem);
+      if (e != NULL)
+        printf("%d, ", t->priority);
+    }
+    printf("\n");
+  }
+  else 
+    printf("List empty.\n");
+}
+
+bool compare_priority (struct list_elem *a,
+                       struct list_elem *b,
+                       void *aux){
+  struct thread *A = list_entry(a, struct thread, elem);
+  struct thread *B = list_entry(b, struct thread, elem);
+
+  if (A->priority > B->priority)
+    return true;
+  else 
+    return false;
+}
 
 void
 thread_init (void) 
@@ -239,7 +268,8 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  // list_push_back (&ready_list, &t->elem);
+  list_insert_ordered(&ready_list, &t->elem, &compare_priority, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -308,7 +338,8 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (curr != idle_thread) 
-    list_push_back (&ready_list, &curr->elem);
+    // list_push_back (&ready_list, &curr->elem);
+    list_insert_ordered (&ready_list, &curr->elem, &compare_priority, NULL);
   curr->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -319,6 +350,15 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  if (!list_empty (&ready_list)){
+    struct thread *t;
+    struct list_elem *e;
+    e = list_begin (&ready_list);
+    t = list_entry (e, struct thread, elem);
+    if (t->priority > thread_current ()->priority){
+      thread_yield ();
+    }
+  }
 }
 
 /* Returns the current thread's priority. */

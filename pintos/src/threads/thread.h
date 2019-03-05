@@ -136,5 +136,10 @@ int thread_get_load_avg (void);
 
 static struct thread *idle_thread;
 
+bool compare_priority (struct list_elem *a,
+                       struct list_elem *b,
+                       void *aux);
+
+void print_block_list_priority(struct list *l);
 
 #endif /* threads/thread.h */
