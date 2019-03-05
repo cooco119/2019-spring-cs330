@@ -1,1 +1,2 @@
 .vscode
+pintos/src/threads/build/**
