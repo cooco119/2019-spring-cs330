@@ -1,2 +1,3 @@
 .vscode
 pintos/src/threads/build/**
+pintos/src/userprog/build/**
