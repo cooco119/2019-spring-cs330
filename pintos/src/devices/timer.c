@@ -97,17 +97,17 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
-bool compare_priority (struct list_elem *a,
-                       struct list_elem *b,
-                       void *aux){
-  struct thread *A = list_entry(a, struct thread, elem);
-  struct thread *B = list_entry(b, struct thread, elem);
+// bool compare_priority (struct list_elem *a,
+//                        struct list_elem *b,
+//                        void *aux){
+//   struct thread *A = list_entry(a, struct thread, elem);
+//   struct thread *B = list_entry(b, struct thread, elem);
 
-  if (A->priority > B->priority)
-    return true;
-  else 
-    return false;
-}
+//   if (A->priority > B->priority)
+//     return true;
+//   else 
+//     return false;
+// }
 
 /* Suspends execution for approximately TICKS timer ticks. */
 void
@@ -153,23 +153,6 @@ timer_print_stats (void)
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
 
-
-void print_block_list_priority(struct list *l){
-  struct thread *t;
-  struct list_elem *e;
-  if (!list_empty(l)){
-    printf("Block List priorities: ");
-    for (e = list_begin(l); e != list_end(l); e = e->next){
-      t = list_entry(e, struct thread, elem);
-      if (e != NULL)
-        printf("%d, ", t->priority);
-    }
-    printf("\n");
-  }
-  else 
-    printf("List empty.\n");
-}
-
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
