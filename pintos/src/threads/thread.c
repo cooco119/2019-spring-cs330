@@ -89,7 +89,7 @@ static tid_t allocate_tid (void);
 
 /* This is 2016 spring cs330 skeleton code */
 
-void print_block_list_priority(struct list *l){
+void print_list_priority(struct list *l){
   struct thread *t;
   struct list_elem *e;
   if (!list_empty(l)){
@@ -231,6 +231,9 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+
+  if (thread_current ()->priority < t->priority)
+    thread_yield ();
 
   return tid;
 }

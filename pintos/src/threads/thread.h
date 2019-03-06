@@ -140,6 +140,6 @@ bool compare_priority (struct list_elem *a,
                        struct list_elem *b,
                        void *aux);
 
-void print_block_list_priority(struct list *l);
+void print_list_priority(struct list *l);
 
 #endif /* threads/thread.h */
