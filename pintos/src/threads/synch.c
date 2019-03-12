@@ -188,6 +188,7 @@ lock_init (struct lock *lock)
 {
   ASSERT (lock != NULL);
 
+  list_init(&lock->donated_list);
   lock->holder = NULL;
   sema_init (&lock->semaphore, 1);
 }
@@ -213,6 +214,8 @@ lock_acquire (struct lock *lock)
   if ((&lock_sema)->value == 0 && holder->priority < thread_current ()->priority){ // or test if lock->semaphore->value == 0
     int holder_priority = holder->priority;
     holder->priority = thread_current ()->priority;
+    list_push_back(&lock->donated_list, &holder->elem_donated);
+    // printf("Added %s into donated_list\n", holder->name);
     sema_down (&lock->semaphore);
     holder->priority = holder_priority;
   }
@@ -255,6 +258,16 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+  struct list_elem *e;
+  struct thread *t;
+  if (! list_empty(&lock->donated_list)){
+    e = list_pop_front(&lock->donated_list);
+    t = list_entry(e, struct thread, elem_donated);
+    // printf("Holder: %s, priority: %d, creation_priority: %d\n", t->name, t->priority, t->creation_priority);
+    t->priority = t->creation_priority;
+    // lock->holder->priority = lock->holder->creation_priority ;
+    thread_yield();
+  }
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 }
