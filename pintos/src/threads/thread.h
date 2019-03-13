@@ -90,7 +90,10 @@ struct thread
     int priority;                       /* Priority. */
     int64_t block_end_tick;             /* Tick when block should be ended */
     int creation_priority;
-    struct list_elem elem_donated;
+    struct list_elem elem_wait_lock;
+    struct list lock_list;
+    struct list wait_list;
+    struct list_elem elem_sema;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
