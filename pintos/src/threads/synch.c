@@ -74,7 +74,7 @@ sema_down (struct semaphore *sema)
   while (sema->value == 0) 
   // if (sema->value <= 0)
     {
-      list_insert_ordered (&sema->waiters, &thread_current ()->elem_sema, &compare_priority, NULL);
+      list_insert_ordered (&sema->waiters, &thread_current ()->elem_sema, &compare_priority, "elem_sema");
       thread_block ();
     }
   sema->value--;
@@ -120,6 +120,7 @@ sema_up (struct semaphore *sema)
 
   old_level = intr_disable ();
   sema->value++;
+  list_sort(&sema->waiters, &compare_priority, "elem_sema");
   if (sema->value > 0){
     if (!list_empty (&sema->waiters)) {
       thread_unblock (list_entry (list_pop_front (&sema->waiters),
@@ -167,6 +168,27 @@ sema_test_helper (void *sema_)
       sema_up (&sema[1]);
     }
 }
+
+bool compare_priority_lock (struct list_elem *a,
+                       struct list_elem *b,
+                       void *aux){
+  struct lock *A = list_entry(a, struct lock, elem_lock);
+  struct lock *B = list_entry(b, struct lock, elem_lock);
+
+  if (list_empty(&(&A->semaphore)->waiters) || list_empty(&(&B->semaphore)->waiters)){
+    return true;
+  }
+
+  int A_priority = list_entry(list_front(&(&A->semaphore)->waiters), struct thread, elem_sema);
+  int B_priority = list_entry(list_front(&(&B->semaphore)->waiters), struct thread, elem_sema);
+
+
+  if (A_priority > B_priority)
+    return true;
+  else 
+    return false;
+}
+
 
 /* Initializes LOCK.  A lock can be held by at most a single
    thread at any given time.  Our locks are not "recursive", that
@@ -215,34 +237,40 @@ lock_acquire (struct lock *lock)
   struct thread *holder_of_holder;
   struct lock *lock_of_holder;
   struct list_elem *e;
+  struct thread *first_waiter;
 
-  if (thread_current () != idle_thread && (&lock_sema)->value == 0 && holder->priority < thread_current ()->priority){ // or test if lock->semaphore->value == 0
-    holder->priority = thread_current ()->priority;
-    list_push_back(&thread_current()->wait_list, &lock->elem_wait);
-    lock->num_waiters++;
-    list_push_back(&lock->wait_thread_list, &thread_current()->elem_wait_lock);
-    e = list_begin(&holder->wait_list);
-    for (i = 0; i < 2; i++){
-      if (e == list_tail(&holder->wait_list)){
-        break;
+  if (holder != NULL){ 
+    if ((&lock_sema)->value == 0 && holder->priority < thread_current ()->priority){ // or test if lock->semaphore->value == 0
+      holder->priority = thread_current ()->priority;
+      list_push_back(&thread_current()->wait_list, &lock->elem_wait);
+      lock->num_waiters++;
+      list_insert_ordered(&lock->wait_thread_list, &thread_current()->elem_wait_lock, &compare_priority, "elem_wait_lock");
+      e = list_begin(&holder->wait_list);
+      for (i = 0; i < 2; i++){
+        if (e == list_tail(&holder->wait_list)){
+          break;
+        }
+        lock_of_holder = list_entry(e, struct lock, elem_wait);
+        holder_of_holder = lock_of_holder->holder;
+        if (holder_of_holder->priority < thread_current()->priority){
+          holder_of_holder->priority = thread_current()->priority;
+        }
+        e = e->next;
       }
-      lock_of_holder = list_entry(e, struct lock, elem_wait);
-      holder_of_holder = lock_of_holder->holder;
-      if (holder_of_holder->priority < thread_current()->priority){
-        holder_of_holder->priority = thread_current()->priority;
-      }
-      e = e->next;
+      sema_down (&lock->semaphore);
+      list_remove(&lock->elem_wait);
+      list_remove(&thread_current()->elem_wait_lock);
+      lock->num_waiters--;
     }
-    sema_down (&lock->semaphore);
-    list_remove(&lock->elem_wait);
-    list_remove(&thread_current()->elem_wait_lock);
-    lock->num_waiters--;
+    else {
+      sema_down (&lock->semaphore);
+    }
   }
   else {
-    sema_down (&lock->semaphore);
+    sema_down(&lock->semaphore);
   }
 
-  list_push_back(&thread_current()->lock_list, &lock->elem_lock);
+  list_insert_ordered(&thread_current()->lock_list, &lock->elem_lock, &compare_priority_lock, NULL);
   lock->holder = thread_current ();
 }
 
@@ -285,39 +313,29 @@ lock_release (struct lock *lock)
   int i = 0, j = 0;
   struct list lock_waiters;
   int max_priority = holder->creation_priority;
+  int max_lock_priority = 0;
   struct lock *lock_of_holder;
 
+  struct thread *high_priority_waiter;
+  struct lock *high_priority_lock;
+
   list_remove(&lock->elem_lock);
-  if (! list_empty(&holder->lock_list)){ 
-    e = list_begin(&holder->lock_list);
-    if (e != NULL) {
-      for (i = 0; i < 2; i++) {
-        if (e == list_tail(&holder->lock_list)){
-          break;
-        }
-        lock_of_holder = list_entry(e, struct lock, elem_lock);
-        lock_waiters = lock_of_holder->wait_thread_list;
-        // printf("Num waiters: %d\n", lock->num_waiters);
-        if (lock->num_waiters != 0){ 
-          e2 = list_begin(&lock_waiters);
-          if (e2 != NULL){
-            for (j = 0; j < 2; j++) {
-              if (e2 == &(&lock_waiters)->tail){
-                break;
-              }
-              t = list_entry(e2, struct thread, elem);
-              if (t->priority > max_priority){
-                max_priority = t->priority;
-              }
-              e2 = e2->next;
-            }
-          }
-        }
-        e = e->next;
-      }
+
+  if (!list_empty(&lock->wait_thread_list)){
+    high_priority_waiter = list_entry(list_front(&lock->wait_thread_list), struct thread, elem_wait_lock);
+    if (holder->priority >= high_priority_waiter->priority){
+      max_priority = holder->creation_priority;
+        // printf("P1\n");
     }
   }
-
+  if ( ! list_empty(&holder->lock_list)){
+    high_priority_lock = list_entry(list_front(&holder->lock_list), struct lock, elem_lock);
+    if (! list_empty(&high_priority_lock->wait_thread_list)){ 
+      max_lock_priority = list_entry(list_front(&high_priority_lock->wait_thread_list), struct thread, elem_wait_lock)->priority;
+    }
+    // printf("P1, priority: %d\n", max_priority);
+    max_priority = max_priority > max_lock_priority ? max_priority : max_lock_priority;
+  }
   holder->priority = max_priority;
 
   lock->holder = NULL;

@@ -108,8 +108,22 @@ void print_list_priority(struct list *l){
 bool compare_priority (struct list_elem *a,
                        struct list_elem *b,
                        void *aux){
-  struct thread *A = list_entry(a, struct thread, elem);
-  struct thread *B = list_entry(b, struct thread, elem);
+  struct thread *A;
+  struct thread *B;
+  if (aux == NULL){
+    A = list_entry(a, struct thread, elem);
+    B = list_entry(b, struct thread, elem);
+  }
+
+  if (aux == "elem_sema"){
+    A = list_entry(a, struct thread, elem_sema);
+    B = list_entry(b, struct thread, elem_sema);
+  }
+
+  if (aux == "elem_wait_lock") {
+    A = list_entry(a, struct thread, elem_sema);
+    B = list_entry(b, struct thread, elem_sema);
+  }
 
   if (A->priority > B->priority)
     return true;
@@ -232,8 +246,9 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
-  if (thread_current ()->priority < t->priority)
+  if (thread_current ()->priority < t->priority){
     thread_yield ();
+  }
 
   return tid;
 }
@@ -353,6 +368,7 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  thread_current ()->creation_priority = new_priority;
   if (!list_empty (&ready_list)){
     struct thread *t;
     struct list_elem *e;
