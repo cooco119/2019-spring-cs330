@@ -257,12 +257,14 @@ lock_acquire (struct lock *lock)
         }
         e = e->next;
       }
+      // printf("P3\n");
       sema_down (&lock->semaphore);
       list_remove(&lock->elem_wait);
       list_remove(&thread_current()->elem_wait_lock);
       lock->num_waiters--;
     }
     else {
+      // printf("P4\n");
       sema_down (&lock->semaphore);
     }
   }

@@ -220,6 +220,8 @@ thread_create (const char *name, int priority,
 
   ASSERT (function != NULL);
 
+  // printf("Current (%s) priority: %d\n", thread_current()->name, thread_current()->priority);
+
   /* Allocate thread. */
   t = palloc_get_page (PAL_ZERO);
   if (t == NULL)
@@ -246,7 +248,9 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  // printf("Current priority: %d, new priority: %d\n", thread_current()->priority, t->priority);
   if (thread_current ()->priority < t->priority){
+    // printf("Thead (%s) yielding\n", thread_current()->name);
     thread_yield ();
   }
 
