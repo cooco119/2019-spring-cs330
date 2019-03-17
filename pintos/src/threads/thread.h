@@ -95,6 +95,10 @@ struct thread
     struct list wait_list;
     struct list_elem elem_sema;
     int waiting_priority;
+    struct list_elem elem_block;
+    int recent_cpu;
+    struct list_elem elem_all;
+    int nice;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -147,5 +151,10 @@ bool compare_priority (struct list_elem *a,
                        void *aux);
 
 void print_list_priority(struct list *l);
+
+static struct list ready_list;
+static struct list all_threads;
+static int load_avg;
+static int ready_threads;
 
 #endif /* threads/thread.h */

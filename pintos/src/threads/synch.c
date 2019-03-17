@@ -240,14 +240,14 @@ lock_acquire (struct lock *lock)
   struct list_elem *e;
   struct thread *first_waiter;
 
-  if (holder != NULL){ 
+  if (holder != NULL && ! thread_mlfqs){ 
     if ((&lock_sema)->value == 0 && holder->priority < thread_current ()->priority){ // or test if lock->semaphore->value == 0
       holder->priority = thread_current ()->priority;
       list_push_back(&thread_current()->wait_list, &lock->elem_wait);
       lock->num_waiters++;
       list_insert_ordered(&lock->wait_thread_list, &thread_current()->elem_wait_lock, &compare_priority, "elem_wait_lock");
       e = list_begin(&holder->wait_list);
-      for (i = 0; i < 2; i++){
+      for (i = 0; i < 8; i++){
         if (e == list_tail(&holder->wait_list)){
           break;
         }
@@ -322,22 +322,24 @@ lock_release (struct lock *lock)
   struct thread *high_priority_waiter;
   struct lock *high_priority_lock;
 
-  list_remove(&lock->elem_lock);
+  if (! thread_mlfqs){ 
+    list_remove(&lock->elem_lock);
 
-  if (!list_empty(&lock->wait_thread_list)){
-    high_priority_waiter = list_entry(list_front(&lock->wait_thread_list), struct thread, elem_wait_lock);
-    if (holder->priority >= high_priority_waiter->priority){
-      max_priority = holder->creation_priority;
-        // printf("P1\n");
+    if (!list_empty(&lock->wait_thread_list)){
+      high_priority_waiter = list_entry(list_front(&lock->wait_thread_list), struct thread, elem_wait_lock);
+      if (holder->priority >= high_priority_waiter->priority){
+        max_priority = holder->creation_priority;
+          // printf("P1\n");
+      }
     }
-  }
-  if ( ! list_empty(&holder->lock_list)){
-    high_priority_lock = list_entry(list_front(&holder->lock_list), struct lock, elem_lock);
-    if (! list_empty(&high_priority_lock->wait_thread_list)){ 
-      max_lock_priority = list_entry(list_front(&high_priority_lock->wait_thread_list), struct thread, elem_wait_lock)->priority;
+    if ( ! list_empty(&holder->lock_list)){
+      high_priority_lock = list_entry(list_front(&holder->lock_list), struct lock, elem_lock);
+      if (! list_empty(&high_priority_lock->wait_thread_list)){ 
+        max_lock_priority = list_entry(list_front(&high_priority_lock->wait_thread_list), struct thread, elem_wait_lock)->priority;
+      }
+      // printf("P1, priority: %d\n", max_priority);
+      max_priority = max_priority > max_lock_priority ? max_priority : max_lock_priority;
     }
-    // printf("P1, priority: %d\n", max_priority);
-    max_priority = max_priority > max_lock_priority ? max_priority : max_lock_priority;
   }
   
   holder->priority = max_priority;
@@ -419,9 +421,11 @@ cond_wait (struct condition *cond, struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
   
   sema_init (&waiter.semaphore, 0);
-  int *p = (&waiter.priority);
-  *p = thread_current ()->priority;
-  list_insert_ordered (&cond->waiters, &waiter.elem, &compare_priority_waiter, NULL);
+  if (! thread_mlfqs){ 
+    int *p = (&waiter.priority);
+    *p = thread_current ()->priority;
+    list_insert_ordered (&cond->waiters, &waiter.elem, &compare_priority_waiter, NULL);
+  }
   lock_release (lock);
   sema_down (&waiter.semaphore);
   lock_acquire (lock);

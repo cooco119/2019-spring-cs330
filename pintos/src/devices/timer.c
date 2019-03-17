@@ -185,6 +185,34 @@ timer_interrupt (struct intr_frame *args UNUSED)
       }
     }
   }
+  int nice, recent_cpu, load_avg_mul;
+  if (thread_mlfqs && thread_current() != idle_thread) {
+    if (!list_empty(&ready_list)){ 
+      // list_sort(&ready_list, &compare_priority, "elem");
+      load_avg = add_float_float(mul_float_float(div_float_dec(dec_to_float(59), 60), load_avg), mul_float_dec(div_float_dec(dec_to_float(1), 60), ready_threads));
+    
+      if (! list_empty(&all_threads)) {
+        for (e = list_begin(&all_threads); e != list_end(&all_threads); e = e->next){
+          t = list_entry(e, struct thread, elem_all);
+          if (t != idle_thread){
+            nice = thread_get_nice();
+            if (t->recent_cpu != NULL){
+              recent_cpu = t->recent_cpu;
+            }
+            else {
+              continue;
+            }
+            load_avg_mul = div_float_float(mul_float_dec(load_avg, 2), add_float_dec(mul_float_dec(load_avg, 2), 1));
+
+            recent_cpu = mul_float_float(load_avg_mul, recent_cpu);
+            recent_cpu = add_float_dec(recent_cpu, nice);
+            t->recent_cpu = recent_cpu;
+
+          }
+        }
+      }
+    }
+  }
   intr_set_level(old_level);
   thread_tick ();
 }
