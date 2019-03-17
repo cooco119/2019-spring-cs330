@@ -214,6 +214,7 @@ lock_init (struct lock *lock)
   lock->num_waiters = 0;
   lock->holder = NULL;
   sema_init (&lock->semaphore, 1);
+  lock->main = NULL;
 }
 
 /* Acquires LOCK, sleeping until it becomes available if
@@ -338,8 +339,9 @@ lock_release (struct lock *lock)
     // printf("P1, priority: %d\n", max_priority);
     max_priority = max_priority > max_lock_priority ? max_priority : max_lock_priority;
   }
+  
   holder->priority = max_priority;
-
+  
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 }

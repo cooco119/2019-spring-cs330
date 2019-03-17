@@ -371,16 +371,28 @@ thread_yield (void)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
-  thread_current ()->creation_priority = new_priority;
-  if (!list_empty (&ready_list)){
-    struct thread *t;
-    struct list_elem *e;
-    e = list_begin (&ready_list);
-    t = list_entry (e, struct thread, elem);
-    if (t->priority > thread_current ()->priority){
-      thread_yield ();
+  struct lock *lock;
+  if (thread_current()->priority == thread_current()->creation_priority){ 
+    thread_current ()->priority = new_priority;
+    thread_current ()->creation_priority = new_priority;
+    if (!list_empty (&ready_list)){
+      struct thread *t;
+      struct list_elem *e;
+      e = list_begin (&ready_list);
+      t = list_entry (e, struct thread, elem);
+      if (t->priority > thread_current ()->priority){
+        thread_yield ();
+      }
     }
+  }
+  else {
+    if (! list_empty(&thread_current()->lock_list)){
+      lock = list_entry(list_front(&thread_current()->lock_list), struct lock, elem_lock);
+      lock->main = thread_current();
+      // printf("Main: %s\n", lock->main->name);
+      lock->main->creation_priority = new_priority;
+    }
+    // printf("Set waiting priority to %d\n", thread_current()->waiting_priority);
   }
 }
 
@@ -510,6 +522,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->creation_priority = priority;
   list_init(&t->lock_list);
   list_init(&t->wait_list);
+  t->waiting_priority = -1;
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

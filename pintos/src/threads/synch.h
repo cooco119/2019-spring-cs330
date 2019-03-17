@@ -26,6 +26,7 @@ struct lock
     struct list_elem elem_wait;
     struct list_elem elem_lock;
     int num_waiters;
+    struct thread *main;
   };
 
 void lock_init (struct lock *);

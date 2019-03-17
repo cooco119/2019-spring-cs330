@@ -94,6 +94,7 @@ struct thread
     struct list lock_list;
     struct list wait_list;
     struct list_elem elem_sema;
+    int waiting_priority;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
