@@ -96,7 +96,7 @@ struct thread
     struct list_elem elem_sema;
     int waiting_priority;
     struct list_elem elem_block;
-    int recent_cpu;
+    int32_t recent_cpu;
     struct list_elem elem_all;
     int nice;
 
@@ -153,7 +153,7 @@ bool compare_priority (struct list_elem *a,
 void print_list_priority(struct list *l);
 
 static struct list ready_list;
-static int load_avg;
+static int32_t load_avg;
 static int ready_threads;
 static struct thread *initial_thread;
 static struct list all_threads;

@@ -186,10 +186,6 @@ timer_interrupt (struct intr_frame *args UNUSED)
       }
     }
   }
-  intr_set_level(old_level);
-  thread_tick ();
-
-  int nice, recent_cpu, load_avg_mul, priority, ready;
   if (thread_mlfqs) {
     if (ticks % TIMER_FREQ == 0 ){
       //// Calculating load avg
@@ -221,9 +217,9 @@ timer_interrupt (struct intr_frame *args UNUSED)
       //     }
       //   }
       // }
-      calculate_recent_cpu();
+      // calculate_recent_cpu();
     }
-    else if (ticks % 4 == 3) {
+    if (ticks % 4 == 0) {
       // // update priority
       // if (! list_empty(&all_threads)){
       //   for (e = list_begin(&all_threads); e != list_end(&all_threads); e = list_next(e)){
@@ -243,6 +239,9 @@ timer_interrupt (struct intr_frame *args UNUSED)
       // update_priority();
     }
   }
+  intr_set_level(old_level);
+  thread_tick ();
+
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

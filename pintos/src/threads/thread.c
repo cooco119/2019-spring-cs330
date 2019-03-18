@@ -72,7 +72,7 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
-static int load_avg;
+static int32_t load_avg;
 static int ready_threads = 0;
 static struct list all_threads;
 
@@ -478,12 +478,15 @@ void
 calculate_recent_cpu (void) {
   struct list_elem *e;
   struct thread *t;
-  int nice, recent_cpu, load_avg_mul;
+  int nice;
+  int32_t load_avg_mul;
+  int32_t recent_cpu;
   //// calculate recent_cpu
+  // printf("all size : %d\n", list_size(&all_threads));
   if (! list_empty(&all_threads)) {
-    for (e = list_begin(&all_threads); e != list_end(&all_threads); e = e->next){
+    for (e = list_begin(&all_threads); e != list_end(&all_threads); e = list_next(e)){
       t = list_entry(e, struct thread, elem_all);
-      printf("name: %s nice : %d, recent : %d\n", t->name, t->nice, t->recent_cpu);
+      // printf("name: %s nice : %d, recent : %d\n", t->name, t->nice, t->recent_cpu);
       if (t != idle_thread){
         nice = t->nice;
         recent_cpu = t->recent_cpu;
@@ -535,6 +538,7 @@ get_ready_threads (void) {
     ready_threads = list_size(&ready_list);
   }
 
+  // printf("ready : %d\n", ready_threads);
   return ready_threads;
 }
 
