@@ -7,6 +7,7 @@
 #include "threads/io.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "threads/init.h"
   
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -185,36 +186,63 @@ timer_interrupt (struct intr_frame *args UNUSED)
       }
     }
   }
-  int nice, recent_cpu, load_avg_mul;
-  if (thread_mlfqs && thread_current() != idle_thread) {
-    if (!list_empty(&ready_list)){ 
-      // list_sort(&ready_list, &compare_priority, "elem");
-      load_avg = add_float_float(mul_float_float(div_float_dec(dec_to_float(59), 60), load_avg), mul_float_dec(div_float_dec(dec_to_float(1), 60), ready_threads));
-    
-      if (! list_empty(&all_threads)) {
-        for (e = list_begin(&all_threads); e != list_end(&all_threads); e = e->next){
-          t = list_entry(e, struct thread, elem_all);
-          if (t != idle_thread){
-            nice = thread_get_nice();
-            if (t->recent_cpu != NULL){
-              recent_cpu = t->recent_cpu;
-            }
-            else {
-              continue;
-            }
-            load_avg_mul = div_float_float(mul_float_dec(load_avg, 2), add_float_dec(mul_float_dec(load_avg, 2), 1));
-
-            recent_cpu = mul_float_float(load_avg_mul, recent_cpu);
-            recent_cpu = add_float_dec(recent_cpu, nice);
-            t->recent_cpu = recent_cpu;
-
-          }
-        }
-      }
-    }
-  }
   intr_set_level(old_level);
   thread_tick ();
+
+  int nice, recent_cpu, load_avg_mul, priority, ready;
+  if (thread_mlfqs) {
+    if (ticks % TIMER_FREQ == 0 ){
+      //// Calculating load avg
+      // ///// get ready_threads
+      // if (thread_current() != idle_thread){
+      //   ready_threads = list_size(&ready_list) + 1;
+      // }
+      // else {
+      //   ready_threads = list_size(&ready_list);
+      // }
+      // ready = get_ready_threads();
+      // load_avg = add_float_float(mul_float_float(div_float_dec(dec_to_float(59), 60), load_avg), mul_float_dec(div_float_dec(dec_to_float(1), 60), ready));
+      calculate_load_avg();
+
+      ////
+
+      // //// calculate recent_cpu
+      // if (! list_empty(&all_threads)) {
+      //   for (e = list_begin(&all_threads); e != list_end(&all_threads); e = e->next){
+      //     t = list_entry(e, struct thread, elem_all);
+      //     if (t != idle_thread){
+      //       nice = t->nice;
+      //       recent_cpu = t->recent_cpu;
+      //       load_avg_mul = div_float_float(mul_float_dec(load_avg, 2), add_float_dec(mul_float_dec(load_avg, 2), 1));
+      //       recent_cpu = mul_float_float(load_avg_mul, recent_cpu);
+      //       recent_cpu = add_float_dec(recent_cpu, nice);
+      //       t->recent_cpu = recent_cpu;
+
+      //     }
+      //   }
+      // }
+      calculate_recent_cpu();
+    }
+    else if (ticks % 4 == 3) {
+      // // update priority
+      // if (! list_empty(&all_threads)){
+      //   for (e = list_begin(&all_threads); e != list_end(&all_threads); e = list_next(e)){
+      //     t = list_entry(e, struct thread, elem_all);
+      //     if (t != idle_thread){
+      //       priority = float_to_dec_nearest(PRI_MAX - (recent_cpu / 4) - (nice * 2));
+      //       if (priority > PRI_MAX){
+      //         priority = PRI_MAX;
+      //       }
+      //       else if (priority < PRI_MIN){
+      //         priority = PRI_MIN;
+      //       }
+      //       thread_set_priority(priority);
+      //     }
+      //   }
+      // }
+      // update_priority();
+    }
+  }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

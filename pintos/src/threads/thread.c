@@ -76,19 +76,19 @@ static int load_avg;
 static int ready_threads = 0;
 static struct list all_threads;
 
-/* float arithmetics */
-int pow(int a, int b);
-int dec_to_float(int n);
-int float_to_dec_round_zero(int x);
-int float_to_dec_nearest(int x);
-int add_float_float(int x, int y);
-int sub_float_float(int x, int y);
-int add_float_dec(int x, int n);
-int sub_float_dec(int x, int n);
-int mul_float_float(int x, int y);
-int mul_float_dec(int x, int n);
-int div_float_float(int x, int y);
-int div_float_dec(int x, int n);
+// /* float arithmetics */
+// int pow(int a, int b);
+// int dec_to_float(int n);
+// int float_to_dec_round_zero(int x);
+// int float_to_dec_nearest(int x);
+// int add_float_float(int x, int y);
+// int sub_float_float(int x, int y);
+// int add_float_dec(int x, int n);
+// int sub_float_dec(int x, int n);
+// int mul_float_float(int x, int y);
+// int mul_float_dec(int x, int n);
+// int div_float_float(int x, int y);
+// int div_float_dec(int x, int n);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -268,11 +268,6 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
-  if (thread_mlfqs && t != idle_thread){
-    list_push_back(&all_threads, &t->elem_all);
-    printf("Pushed %s to all_thread list\n", t->name);
-  }
-
   // printf("Current priority: %d, new priority: %d\n", thread_current()->priority, t->priority);
   if (thread_current ()->priority < t->priority){
     // printf("Thead (%s) yielding\n", thread_current()->name);
@@ -295,7 +290,6 @@ thread_block (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   thread_current ()->status = THREAD_BLOCKED;
-  ready_threads--;
   schedule ();
 }
 
@@ -386,9 +380,10 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  if (curr != idle_thread) 
+  if (curr != idle_thread) {
     // list_push_back (&ready_list, &curr->elem);
     list_insert_ordered (&ready_list, &curr->elem, &compare_priority, NULL);
+  }
   curr->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -432,11 +427,28 @@ thread_get_priority (void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED) 
+thread_set_nice (int nice /*UNUSED*/) 
 {
-  thread_current()->nice = nice;
+  int load_avg_mul;
   int recent_cpu = thread_get_recent_cpu();
-  thread_set_priority(PRI_MAX - (recent_cpu / 4) - (nice * 2));
+  int priority;
+  thread_current()->nice = nice;
+  
+  if (thread_current() != idle_thread){
+    load_avg_mul = div_float_float(mul_float_dec(load_avg, 2), add_float_dec(mul_float_dec(load_avg, 2), 1));
+
+    recent_cpu = mul_float_float(load_avg_mul, recent_cpu);
+    recent_cpu = add_float_dec(recent_cpu, nice);
+
+    priority = float_to_dec_nearest(PRI_MAX - (recent_cpu / 4) - (nice * 2));
+    if (priority > PRI_MAX){
+      priority = PRI_MAX;
+    }
+    else if (priority < PRI_MIN){
+      priority = PRI_MIN;
+    }
+    thread_current()->priority = priority;
+  }
 }
 
 /* Returns the current thread's nice value. */
@@ -450,7 +462,7 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void) 
 {
-  return float_to_dec_nearest(load_avg);
+  return float_to_dec_nearest(100 * load_avg);
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
@@ -459,7 +471,80 @@ thread_get_recent_cpu (void)
 {
   int recent_cpu = thread_current ()->recent_cpu;
 
-  return float_to_dec_round_zero(recent_cpu);
+  return float_to_dec_nearest(100 * recent_cpu);
+}
+
+void
+calculate_recent_cpu (void) {
+  struct list_elem *e;
+  struct thread *t;
+  int nice, recent_cpu, load_avg_mul;
+  //// calculate recent_cpu
+  if (! list_empty(&all_threads)) {
+    for (e = list_begin(&all_threads); e != list_end(&all_threads); e = e->next){
+      t = list_entry(e, struct thread, elem_all);
+      printf("name: %s nice : %d, recent : %d\n", t->name, t->nice, t->recent_cpu);
+      if (t != idle_thread){
+        nice = t->nice;
+        recent_cpu = t->recent_cpu;
+        load_avg_mul = div_float_float(mul_float_dec(load_avg, 2), add_float_dec(mul_float_dec(load_avg, 2), 1));
+        recent_cpu = mul_float_float(load_avg_mul, recent_cpu);
+        recent_cpu = add_float_dec(recent_cpu, nice);
+        t->recent_cpu = recent_cpu;
+        // printf("thread %s recent cpu : %d\n", t->name, t->recent_cpu);
+      }
+    }
+  }
+}
+
+void
+update_priority (void) {
+  struct list_elem *e;
+  struct thread *t;
+  int nice, recent_cpu, priority;
+  // update priority
+  if (! list_empty(&all_threads)){
+    for (e = list_begin(&all_threads); e != list_end(&all_threads); e = list_next(e)){
+      t = list_entry(e, struct thread, elem_all);
+      if (t != idle_thread){
+        nice = t->nice;
+        recent_cpu = t->recent_cpu;
+        priority = float_to_dec_nearest(PRI_MAX - (recent_cpu / 4) - (nice * 2));
+        if (priority > PRI_MAX){
+          priority = PRI_MAX;
+        }
+        else if (priority < PRI_MIN){
+          priority = PRI_MIN;
+        }
+        // thread_set_priority(priority);
+        t->priority = priority;
+      }
+    }
+  }
+}
+
+void 
+get_ready_threads (void) {
+
+  ///// get ready_threads
+  if (thread_current() != idle_thread){
+    ready_threads = list_size(&ready_list) + 1;
+    // printf("I'm not idle\n");
+  }
+  else {
+    ready_threads = list_size(&ready_list);
+  }
+
+  return ready_threads;
+}
+
+void calculate_load_avg(void) {
+  
+  get_ready_threads();
+  load_avg = add_float_float(mul_float_float(div_float_dec(dec_to_float(59), 60), load_avg), mul_float_dec(div_float_dec(dec_to_float(1), 60), ready_threads));
+  // printf("ready : %d, load avg : %d\n", ready_threads, load_avg);
+  // printf("all_thread size : %d\n", list_size(&ready_list));
+
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -551,8 +636,22 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&t->lock_list);
   list_init(&t->wait_list);
   t->waiting_priority = -1;
-  t->recent_cpu = 0;
-  t->nice = 0;
+
+  if (thread_mlfqs){
+    t->nice = 0;
+    if (t == initial_thread){
+      t->recent_cpu = 0;
+    }
+    else {
+      t->recent_cpu = thread_get_recent_cpu();
+    }
+  }
+
+  list_push_back(&all_threads, &t->elem_all);
+  // printf("Pushed %s\n", t->name);
+  // printf("all_threads size : %d\n", list_size(&all_threads));
+
+
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
@@ -670,79 +769,61 @@ allocate_tid (void)
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
 
-/* 
-  fixed point arithmetics, 17.14
-*/
+// /* 
+//   fixed point arithmetics, 17.14
+// */
 
-int pow(int a, int b){
-  int res = 1;
-  for (;;) {
-    if (b & 1)
-      res *= a;
-    b >>= 1;
-    if (!b)
-      break;
-    a *= a;
-  }
-  return res;
-}
+// int 
+// dec_to_float(int n){
+//   return n * (1 << 14);
+// }
 
-int 
-dec_to_float(int n){
-  return n * pow(2, 14);
-}
+// int 
+// float_to_dec_round_zero(int x) {
+//   return x / (1 << 14);
+// }
 
-int 
-float_to_dec_round_zero(int x) {
-  return x / pow(2, 14);
-}
+// int 
+// float_to_dec_nearest(int x) {
+//   return x >= 0 ? (x + (1 << 14) / 2) / (1 << 14) : (x - (1 << 14) / 2) / (1 << 14);
+// }
 
-int 
-float_to_dec_nearest(int x) {
-  if (x >= 0) {
-    return (x + pow(2, 14) / 2) / pow(2, 14);
-  }
-  else {
-    return (x - pow(2, 14) / 2) / pow(2, 14);
-  }
-}
+// int 
+// add_float_float(int x, int y) {
+//   return x + y;
+// }
 
-int 
-add_float_float(int x, int y) {
-  return x + y;
-}
+// int 
+// sub_float_float(int x, int y) {
+//   return x - y;
+// }
 
-int 
-sub_float_float(int x, int y) {
-  return x - y;
-}
+// int
+// add_float_dec(int x, int n) {
+//   return x + n * (1 << 14);
+// }
 
-int
-add_float_dec(int x, int n) {
-  return x + n * pow(2, 14);
-}
+// int 
+// sub_float_dec(int x, int n) {
+//   return x - n * (1 << 14);
+// }
 
-int 
-sub_float_dec(int x, int n) {
-  return x - n * pow(2, 14);
-}
+// int
+// mul_float_float(int x, int y) {
+//   return ((int64_t) x) * y / (1 << 14);
+// }
 
-int
-mul_float_float(int x, int y) {
-  return ((int64_t) x) * y / pow(2, 14);
-}
+// int
+// mul_float_dec(int x, int n) {
+//   return x * n;
+// }
 
-int
-mul_float_dec(int x, int n) {
-  return x * n;
-}
+// int
+// div_float_float(int x, int y) {
+//   return ((int64_t) x) * (1 << 14) / y;
+// }
 
-int
-div_float_float(int x, int y) {
-  return ((int64_t) x) * pow(2, 14) / y;
-}
-
-int
-div_float_dec(int x, int n) {
-  return x / n;
-}
+// int
+// div_float_dec(int x, int n) {
+//   return x / n;
+// }

@@ -153,8 +153,26 @@ bool compare_priority (struct list_elem *a,
 void print_list_priority(struct list *l);
 
 static struct list ready_list;
-static struct list all_threads;
 static int load_avg;
 static int ready_threads;
+static struct thread *initial_thread;
+static struct list all_threads;
+
+void calculate_recent_cpu (void);
+void update_priority (void);
+void get_ready_threads (void);
+void calculate_load_avg(void);
+
+#define dec_to_float(n) (n) * (1 << 14)
+#define float_to_dec_round_zero(x) (x) / (1 << 14)
+#define float_to_dec_nearest(x) (x) >= 0 ? ((x) + (1 << 14) / 2) / (1 << 14) : ((x) - (1 << 14) / 2) / (1 << 14)
+#define add_float_float(x, y) (x) + (y)
+#define sub_float_float(x, y) (x) - (y)
+#define add_float_dec(x, n) (x) + (n) * (1 << 14)
+#define sub_float_dec(x, n) (x) - (n) * (1 << 14)
+#define mul_float_float(x, y) ((int64_t) (x)) * (y) / (1 << 14)
+#define mul_float_dec(x, n) (x) * (n)
+#define div_float_float(x, y) ((int64_t) (x)) * (1 << 14) / (y)
+#define div_float_dec(x, n) (x) / (n)
 
 #endif /* threads/thread.h */

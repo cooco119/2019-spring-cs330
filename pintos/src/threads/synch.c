@@ -241,6 +241,8 @@ lock_acquire (struct lock *lock)
   struct thread *first_waiter;
 
   if (holder != NULL && ! thread_mlfqs){ 
+  // if (holder != NULL){ 
+
     if ((&lock_sema)->value == 0 && holder->priority < thread_current ()->priority){ // or test if lock->semaphore->value == 0
       holder->priority = thread_current ()->priority;
       list_push_back(&thread_current()->wait_list, &lock->elem_wait);
