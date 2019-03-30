@@ -20,6 +20,8 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static char **argv;
+static int argc = 0;
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -30,16 +32,46 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
+  char *token, *save_ptr;
+
+  // char **tmp_argv = (char **) malloc(sizeof(char *) * 14);
+  argv = (char **) malloc(sizeof(char *) * 14);
+
+  for (token = strtok_r (file_name, " ", &save_ptr); token != NULL;
+      token = strtok_r (NULL, " ", &save_ptr)){
+    argv[argc] = token;
+    // printf("argc: %d, token: %s\n", argc, argv[argc]);
+    argc++;
+  }
+
+  // printf("argc: %d\n", argc);
+  // argv = (char **) malloc(sizeof(char *) * argc);
+  // if (argv == NULL){
+  //   printf("malloc failed\n");
+  //   return;
+  // }
+  // for (i = 0, token = strtok_r (file_name, " ", &save_ptr); i < argc;
+  //     i++, token = strtok_r (NULL, " ", &save_ptr)){
+  //   if (argv[i] == NULL) {
+  //     argv[i] = (char *) malloc(sizeof(char) * (strlen(token) + 1));
+  //   }
+  //   argv[i] = token;
+  //   printf("argv[%d] : %s\n", i, token);
+  // }
+  // for (i = 0; i < argc; i++) {
+  //   // argv[i] = tmp_argv[i];
+  //   printf("argv[%d] : %s\n", i, argv[i]);
+  // }
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
+  strlcpy (fn_copy, argv[0], PGSIZE);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (argv[0], PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -60,7 +92,6 @@ start_process (void *f_name)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
-  printf("%s\n", success ? "true" : "false");
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -89,8 +120,11 @@ start_process (void *f_name)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
+  while (true) {
+    thread_yield();
+  }
   return -1;
 }
 
@@ -361,7 +395,7 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
      it then user code that passed a null pointer to system calls
      could quite likely panic the kernel by way of null pointer
      assertions in memcpy(), etc. */
-  if (phdr->p_vaddr < PGSIZE)
+  if (phdr->p_offset < PGSIZE)
     return false;
 
   /* It's okay. */
@@ -434,16 +468,51 @@ setup_stack (void **esp)
 {
   uint8_t *kpage;
   bool success = false;
+  int i, len, arg_len = 0;
 
   kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success)
-        // *esp = PHYS_BASE;
-        *esp = PHYS_BASE - 12;
-      else
+      if (success){
+        *esp = PHYS_BASE;
+ 
+        /* argument tokens */
+        for (i = argc - 1; i >= 0; i--) {
+          len = strlen(argv[i]) + 1;
+          *esp -= len;
+          arg_len += len;
+          strlcpy(*esp, argv[i], len);
+          argv[i] = *esp;
+        }
+
+        /* word align */
+        *esp -= arg_len % 4 != 0 ? 4 - (arg_len % 4) : 0;
+
+        /* argument token addr */
+        *esp -= 4;
+        ** (uint32_t **) esp = 0;
+        for (i = argc - 1; i >= 0; i--) {
+          *esp -= 4;
+          **(uint32_t **) esp = argv[i];
+        }
+
+        /* addr of argv */
+        *esp -= 4;
+        **(uint32_t **) esp = *esp + 4;
+
+        /* argc */
+        *esp -= 4;
+        **(uint32_t **) esp = argc;
+
+        /* ret addr */
+        *esp -= 4;
+        **(uint32_t **) esp = 0;
+      }
+      else{
+        printf("install page failed\n");
         palloc_free_page (kpage);
+      }
     }
   return success;
 }

@@ -287,7 +287,6 @@ thread_exit (void)
 #ifdef USERPROG
   process_exit ();
 #endif
-  printf("%s: exit(%d)\n", thread_current ()->name, 0);
 
   /* Just set our status to dying and schedule another process.
      We will be destroyed during the call to schedule_tail(). */
