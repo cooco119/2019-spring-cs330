@@ -122,7 +122,9 @@ start_process (void *f_name)
 int
 process_wait (tid_t child_tid) 
 {
-  while (true) {
+  int i = 0;
+  while (i < 100) {
+    i++;
     thread_yield();
   }
   return -1;
@@ -508,6 +510,8 @@ setup_stack (void **esp)
         /* ret addr */
         *esp -= 4;
         **(uint32_t **) esp = 0;
+
+        free(argv);
       }
       else{
         printf("install page failed\n");
