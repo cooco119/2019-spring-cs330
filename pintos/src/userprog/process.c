@@ -33,6 +33,7 @@ process_execute (const char *file_name)
   char *fn_copy;
   tid_t tid;
   char *token, *save_ptr;
+  int i;
 
   argc = 0;
   argv = (char **) malloc(sizeof(char *) * 14);
@@ -44,6 +45,10 @@ process_execute (const char *file_name)
     // printf("argc: %d, argv[argc]: %s\n", argc, argv[argc]);
     argc++;
   }
+
+  // for (i = 0; i < argc + 1; i++) {
+  //   printf("argc: %d, argv[%d]: %s\n", i, i, argv[i]);
+  // }
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -529,7 +534,10 @@ setup_stack (void **esp)
         *esp -= 4;
         **(uint32_t **) esp = 0;
 
-        free(argv);
+
+        // free(argv);
+        // hex_dump(*esp, *esp, PHYS_BASE - *esp, 1);
+
       }
       else{
         printf("install page failed\n");
