@@ -156,6 +156,9 @@ bool remove_file (const char *file) {
 
 int open (const char *file) {
   int i = 0;
+  if (file == NULL){
+    exit(-1);
+  }
   struct file *open_file = filesys_open(file);
   if (open_file == NULL) {
     return -1;
@@ -163,7 +166,7 @@ int open (const char *file) {
   else {
     for (i = 3; i < 128; i++) {
       if (thread_current()->files[i] == NULL) {
-        thread_current()->files[i] == open_file;
+        thread_current()->files[i] = open_file;
         return i;
       }
     }
