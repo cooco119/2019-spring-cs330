@@ -135,6 +135,7 @@ int exit(int status) {
 
 tid_t exec (const char *cmd_line) {
   tid_t child_tid;
+  // printf("cmd_line: %s\n", cmd_line);
   child_tid = process_execute(cmd_line);
   return child_tid;
 }

@@ -57,6 +57,10 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, argv[0], PGSIZE);
 
+  if (filesys_open(argv[0]) == NULL) {
+    return -1;
+  }
+
   /* Create a new thread to execute FILE_NAME. */
   // printf("filename @execute : %s\n", fn_copy);
   tid = thread_create (argv[0], PRI_DEFAULT, start_process, fn_copy);
