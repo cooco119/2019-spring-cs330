@@ -444,6 +444,12 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+
+  sema_init(&t->child_lock, 0);
+  lock_init(&t->memory_lock);
+  list_init(&t->list_child);
+  list_push_back(&running_thread()->list_child, &(t->elem_child));
+
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

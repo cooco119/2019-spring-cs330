@@ -74,6 +74,15 @@ process_execute (const char *file_name)
   tid = thread_create (argv[0], PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
+  struct list_elem *e;
+  struct thread *t;
+  for (e = list_front(&thread_current()->list_child); e != list_end(&thread_current()->list_child); e = list_next(e)){
+    t = list_entry(e, struct thread, elem_child);
+    if (t->tid == tid) {
+      // printf("Acquiring memory lock of %s\n", t->name);
+      lock_acquire(&t->memory_lock);
+    }
+  }
   return tid;
 }
 
@@ -85,6 +94,9 @@ start_process (void *f_name)
   char *file_name = f_name;
   struct intr_frame if_;
   bool success;
+  
+  // printf("Acquireing child lock of %s\n", thread_current()->name);
+  // lock_acquire(&thread_current()->child_lock);
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -122,10 +134,20 @@ start_process (void *f_name)
 int
 process_wait (tid_t child_tid) 
 {
-  int i = 0;
-  while (i < 100) {
-    i++;
-    thread_yield();
+  struct list_elem *e;
+  struct thread *t;
+  struct thread *curr = thread_current();
+  for (e = list_front(&curr->list_child); e != list_end(&curr->list_child); e = list_next(e)){
+    t = list_entry(e, struct thread, elem_child);
+    if (t->tid == child_tid){
+      // printf("waiting child %s\n", t->name);
+      sema_down(&t->child_lock);
+      // printf("Removing child\n");
+      list_remove(&t->elem_child);
+      // printf("Releaseing memory lock\n");
+      lock_release(&t->memory_lock);
+      return t->exit_code;
+    }
   }
   return -1;
 }
@@ -153,6 +175,10 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+  // printf("Releasing child lock\n");
+  sema_up(&curr->child_lock);
+  lock_acquire(&curr->memory_lock);
+  // printf("Acquired memory lock");
 }
 
 /* Sets up the CPU for running user code in the current

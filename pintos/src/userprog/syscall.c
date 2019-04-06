@@ -11,8 +11,15 @@ void halt (void);
 int exit (int status);
 tid_t exec (const char *cmd_line);
 int wait (tid_t tid);
+bool create (const char *file, unsigned initial_size);
+bool remove (const char *file);
+int open (const char *file);
+int filesize (int fd);
 int read (int fd, void *buffer, unsigned size);
 int write (int fd, const void *buffer, unsigned size);
+void seek (int fd, unsigned position);
+unsigned tell (int fd);
+void close (int fd);
 
 void
 syscall_init (void) 
@@ -40,13 +47,13 @@ syscall_handler (struct intr_frame *f UNUSED)
       if (! is_user_vaddr(f->esp + 4)){
         exit(-1);
       }
-      exec(*(uint32_t*) (f->esp + 4));
+      f->eax = exec(*(uint32_t*) (f->esp + 4));
       break;
     case SYS_WAIT:                   /* Wait for a child process to die. */
       if (! is_user_vaddr(f->esp + 4)){
         exit(-1);
       }
-      wait( (tid_t)*(uint32_t*)(f->esp + 4));
+      f->eax = wait( (tid_t)*(uint32_t*)(f->esp + 4));
       break;
     case SYS_CREATE:                 /* Create a file. */
       break;
@@ -60,14 +67,14 @@ syscall_handler (struct intr_frame *f UNUSED)
       if (! is_user_vaddr(f->esp + 4) || !is_user_vaddr(f->esp + 8) || !is_user_vaddr(f->esp + 12)){
         exit(-1);
       }
-      read ((int) *(uint32_t*) (f->esp + 4), (void *) *(uint32_t*) (f->esp + 8),
+      f->eax = read ((int) *(uint32_t*) (f->esp + 4), (void *) *(uint32_t*) (f->esp + 8),
             (unsigned) *(uint32_t*) (f->esp + 12));
       break;
     case SYS_WRITE:                  /* Write to a file. */
       if (! is_user_vaddr(f->esp + 4) || !is_user_vaddr(f->esp + 8) || !is_user_vaddr(f->esp + 12)){
         exit(-1);
       }
-      write ((int) *(uint32_t*) (f->esp + 4), (void *) *(uint32_t*) (f->esp + 8), 
+      f->eax = write ((int) *(uint32_t*) (f->esp + 4), (void *) *(uint32_t*) (f->esp + 8), 
               (unsigned) *(uint32_t*) (f->esp + 12));
       break;
     case SYS_SEEK:                   /* Change position in a file. */
@@ -92,7 +99,9 @@ int exit(int status) {
 }
 
 tid_t exec (const char *cmd_line) {
-  return process_execute(cmd_line);
+  tid_t child_tid;
+  child_tid = process_execute(cmd_line);
+  return child_tid;
 }
 
 int wait (tid_t tid) {
