@@ -224,4 +224,5 @@ unsigned tell (int fd) {
 
 void close (int fd){
   file_close(thread_current()->files[fd]);
+  thread_current()->files[fd] = NULL;
 }
