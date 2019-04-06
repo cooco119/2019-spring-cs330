@@ -12,7 +12,7 @@ int exit (int status);
 tid_t exec (const char *cmd_line);
 int wait (tid_t tid);
 bool create (const char *file, unsigned initial_size);
-bool remove (const char *file);
+bool remove_file (const char *file);
 int open (const char *file);
 int filesize (int fd);
 int read (int fd, void *buffer, unsigned size);
@@ -56,12 +56,28 @@ syscall_handler (struct intr_frame *f UNUSED)
       f->eax = wait( (tid_t)*(uint32_t*)(f->esp + 4));
       break;
     case SYS_CREATE:                 /* Create a file. */
+      if (! is_user_vaddr(f->esp + 4) || ! is_user_vaddr(f->esp + 8)){
+        exit(-1);
+      }
+      f->eax = create ((const char *) *(uint32_t*) (f->esp + 4), (unsigned int) *(uint32_t*) (f->esp + 8));
       break;
     case SYS_REMOVE:                 /* Delete a file. */
+      if (! is_user_vaddr(f->esp + 4)){
+        exit(-1);
+      }
+      f->eax = remove_file ((const char *) *(uint32_t*) (f->esp + 4));
       break;
     case SYS_OPEN:                   /* Open a file. */
+      if (! is_user_vaddr(f->esp + 4)){
+        exit(-1);
+      }
+      f->eax = open((const char *)*(uint32_t*) (f->esp + 4));
       break;
     case SYS_FILESIZE:               /* Obtain a file's size. */
+      if (! is_user_vaddr(f->esp + 4)){
+        exit(-1);
+      }
+      f->eax = filesize ((int) *(uint32_t*) (f->esp + 4));
       break;
     case SYS_READ:                   /* Read from a file. */
       if (! is_user_vaddr(f->esp + 4) || !is_user_vaddr(f->esp + 8) || !is_user_vaddr(f->esp + 12)){
@@ -78,10 +94,22 @@ syscall_handler (struct intr_frame *f UNUSED)
               (unsigned) *(uint32_t*) (f->esp + 12));
       break;
     case SYS_SEEK:                   /* Change position in a file. */
+      if (! is_user_vaddr(f->esp + 4) || ! is_user_vaddr(f->esp + 8)){
+        exit(-1);
+      }
+      seek ((int) *(uint32_t*) (f->esp + 4), (unsigned int) *(uint32_t*) (f->esp + 8));
       break;
     case SYS_TELL:                   /* Report current position in a file. */
+      if (! is_user_vaddr(f->esp + 4)){
+        exit(-1);
+      }
+      f->eax = tell ((int) *(uint32_t*) (f->esp + 4));
       break;
     case SYS_CLOSE:
+      if (! is_user_vaddr(f->esp + 4)){
+        exit(-1);
+      }
+      close ((int) *(uint32_t*) (f->esp + 4));
       break;
     default:
       break; 
@@ -94,7 +122,14 @@ void halt(void) {
 }
 
 int exit(int status) {
+  int i = 0;
   printf("%s: exit(%d)\n", thread_name(), status);
+  thread_current()->exit_code = status;
+  for (i = 3; i < 128; i++) {
+    if (thread_current()->files[i] != NULL) {
+      close(i);
+    }
+  }
   thread_exit();
 }
 
@@ -106,6 +141,34 @@ tid_t exec (const char *cmd_line) {
 
 int wait (tid_t tid) {
   return process_wait(tid);
+}
+
+bool create (const char *file, unsigned initial_size) {
+  return filesys_create(file, initial_size);
+}
+
+bool remove_file (const char *file) {
+  return filesys_remove(file);
+}
+
+int open (const char *file) {
+  int i = 0;
+  struct file *open_file = filesys_open(file);
+  if (open_file == NULL) {
+    return -1;
+  }
+  else {
+    for (i = 3; i < 128; i++) {
+      if (thread_current()->files[i] == NULL) {
+        thread_current()->files[i] == open_file;
+        return i;
+      }
+    }
+  }
+}
+
+int filesize (int fd) {
+  return file_length(thread_current()->files[fd]);
 }
 
 int read (int fd, void *buffer, unsigned size) {
@@ -123,6 +186,12 @@ int read (int fd, void *buffer, unsigned size) {
     buffer = (void *) tmp;
     return i;
   }
+  else if (fd >= 3) {
+    if (thread_current()->files[fd] == NULL) {
+      return exit(-1);
+    }
+    return file_read(thread_current()->files[fd], buffer, size);
+  }
 }
 
 int write (int fd, const void *buffer, unsigned size) {
@@ -132,6 +201,21 @@ int write (int fd, const void *buffer, unsigned size) {
     putbuf (buffer, size);
     return size;
   }
+  else if (fd >= 3) {
+    return file_read(thread_current()->files[fd], buffer, size);
+  }
 
   return -1;
+}
+
+void seek (int fd, unsigned position) {
+  file_seek(thread_current()->files[fd], position);
+}
+
+unsigned tell (int fd) {
+  return file_tell(thread_current()->files[fd]);
+}
+
+void close (int fd){
+  file_close(thread_current()->files[fd]);
 }

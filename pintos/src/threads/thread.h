@@ -94,6 +94,8 @@ struct thread
     struct lock memory_lock;
     struct list list_child;
     struct list_elem elem_child;
+    struct thread *child;
+    struct file *files[128];
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */

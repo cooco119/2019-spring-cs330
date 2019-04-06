@@ -34,34 +34,16 @@ process_execute (const char *file_name)
   tid_t tid;
   char *token, *save_ptr;
 
-  // char **tmp_argv = (char **) malloc(sizeof(char *) * 14);
+  argc = 0;
   argv = (char **) malloc(sizeof(char *) * 14);
 
+  // printf("filename @execute param : %s\n", file_name);
   for (token = strtok_r (file_name, " ", &save_ptr); token != NULL;
       token = strtok_r (NULL, " ", &save_ptr)){
     argv[argc] = token;
-    // printf("argc: %d, token: %s\n", argc, argv[argc]);
+    // printf("argc: %d, argv[argc]: %s\n", argc, argv[argc]);
     argc++;
   }
-
-  // printf("argc: %d\n", argc);
-  // argv = (char **) malloc(sizeof(char *) * argc);
-  // if (argv == NULL){
-  //   printf("malloc failed\n");
-  //   return;
-  // }
-  // for (i = 0, token = strtok_r (file_name, " ", &save_ptr); i < argc;
-  //     i++, token = strtok_r (NULL, " ", &save_ptr)){
-  //   if (argv[i] == NULL) {
-  //     argv[i] = (char *) malloc(sizeof(char) * (strlen(token) + 1));
-  //   }
-  //   argv[i] = token;
-  //   printf("argv[%d] : %s\n", i, token);
-  // }
-  // for (i = 0; i < argc; i++) {
-  //   // argv[i] = tmp_argv[i];
-  //   printf("argv[%d] : %s\n", i, argv[i]);
-  // }
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -71,18 +53,19 @@ process_execute (const char *file_name)
   strlcpy (fn_copy, argv[0], PGSIZE);
 
   /* Create a new thread to execute FILE_NAME. */
+  // printf("filename @execute : %s\n", fn_copy);
   tid = thread_create (argv[0], PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
-  struct list_elem *e;
-  struct thread *t;
-  for (e = list_front(&thread_current()->list_child); e != list_end(&thread_current()->list_child); e = list_next(e)){
-    t = list_entry(e, struct thread, elem_child);
-    if (t->tid == tid) {
-      // printf("Acquiring memory lock of %s\n", t->name);
-      lock_acquire(&t->memory_lock);
-    }
-  }
+  // struct list_elem *e;
+  // struct thread *t;
+  // for (e = list_front(&thread_current()->list_child); e != list_end(&thread_current()->list_child); e = list_next(e)){
+  //   t = list_entry(e, struct thread, elem_child);
+  //   if (t->tid == tid) {
+  //     lock_acquire(&t->memory_lock);
+  //   }
+  // }
+  lock_acquire(&thread_current()->child->memory_lock);
   return tid;
 }
 
@@ -134,21 +117,29 @@ start_process (void *f_name)
 int
 process_wait (tid_t child_tid) 
 {
-  struct list_elem *e;
-  struct thread *t;
-  struct thread *curr = thread_current();
-  for (e = list_front(&curr->list_child); e != list_end(&curr->list_child); e = list_next(e)){
-    t = list_entry(e, struct thread, elem_child);
-    if (t->tid == child_tid){
-      // printf("waiting child %s\n", t->name);
-      sema_down(&t->child_lock);
-      // printf("Removing child\n");
-      list_remove(&t->elem_child);
-      // printf("Releaseing memory lock\n");
-      lock_release(&t->memory_lock);
-      return t->exit_code;
-    }
+  struct thread *child = thread_current()->child;
+  if (child_tid == child->tid) {
+    sema_down(&child->child_lock);
+    thread_current()->child == NULL;
+    lock_release(&child->memory_lock);
+    return child->exit_code;
   }
+
+  // struct list_elem *e;
+  // struct thread *t;
+  // struct thread *curr = thread_current();
+  // for (e = list_front(&curr->list_child); e != list_end(&curr->list_child); e = list_next(e)){
+  //   t = list_entry(e, struct thread, elem_child);
+  //   if (t->tid == child_tid){
+  //     // printf("waiting child %s\n", t->name);
+  //     sema_down(&t->child_lock);
+  //     // printf("Removing child\n");
+  //     list_remove(&t->elem_child);
+  //     // printf("Releaseing memory lock\n");
+  //     lock_release(&t->memory_lock);
+  //     return t->exit_code;
+  //   }
+  // }
   return -1;
 }
 
@@ -287,6 +278,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
+  // printf("file name: %s\n", file_name);
   file = filesys_open (file_name);
   if (file == NULL) 
     {

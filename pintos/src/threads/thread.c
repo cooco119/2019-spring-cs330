@@ -11,6 +11,8 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "filesys/filesys.h"
+#include "filesys/file.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -438,6 +440,8 @@ init_thread (struct thread *t, const char *name, int priority)
   ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
   ASSERT (name != NULL);
 
+  int i = 0;
+
   memset (t, 0, sizeof *t);
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
@@ -445,10 +449,15 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
 
+  for (i = 0; i < 128; i++) {
+    t->files[i] = NULL;
+  }
+
   sema_init(&t->child_lock, 0);
   lock_init(&t->memory_lock);
   list_init(&t->list_child);
   list_push_back(&running_thread()->list_child, &(t->elem_child));
+  running_thread()->child = t;
 
 }
 
