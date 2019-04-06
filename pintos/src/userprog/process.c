@@ -127,28 +127,16 @@ int
 process_wait (tid_t child_tid) 
 {
   struct thread *child = thread_current()->child;
+  if (child == NULL) {
+    return -1;
+  }
   if (child_tid == child->tid) {
     sema_down(&child->child_lock);
-    thread_current()->child == NULL;
+    thread_current()->child = NULL;
     lock_release(&child->memory_lock);
     return child->exit_code;
   }
 
-  // struct list_elem *e;
-  // struct thread *t;
-  // struct thread *curr = thread_current();
-  // for (e = list_front(&curr->list_child); e != list_end(&curr->list_child); e = list_next(e)){
-  //   t = list_entry(e, struct thread, elem_child);
-  //   if (t->tid == child_tid){
-  //     // printf("waiting child %s\n", t->name);
-  //     sema_down(&t->child_lock);
-  //     // printf("Removing child\n");
-  //     list_remove(&t->elem_child);
-  //     // printf("Releaseing memory lock\n");
-  //     lock_release(&t->memory_lock);
-  //     return t->exit_code;
-  //   }
-  // }
   return -1;
 }
 
