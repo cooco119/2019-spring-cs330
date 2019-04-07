@@ -454,10 +454,12 @@ init_thread (struct thread *t, const char *name, int priority)
   }
 
   sema_init(&t->child_lock, 0);
-  lock_init(&t->memory_lock);
+  sema_init(&t->memory_lock, 0);
+  sema_init(&t->load_lock, 0);
   list_init(&t->list_child);
   list_push_back(&running_thread()->list_child, &(t->elem_child));
   running_thread()->child = t;
+  t->parent = running_thread();
 
 }
 

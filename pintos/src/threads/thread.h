@@ -91,11 +91,13 @@ struct thread
     int priority;                       /* Priority. */
     int exit_code;
     struct semaphore child_lock;
-    struct lock memory_lock;
+    struct semaphore memory_lock;
     struct list list_child;
     struct list_elem elem_child;
     struct thread *child;
     struct file *files[128];
+    struct semaphore load_lock;
+    struct thread *parent;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */

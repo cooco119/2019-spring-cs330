@@ -66,18 +66,22 @@ process_execute (const char *file_name)
   /* Create a new thread to execute FILE_NAME. */
   // printf("filename @execute : %s\n", fn_copy);
   tid = thread_create (argv[0], PRI_DEFAULT, start_process, fn_copy);
+  sema_down(&thread_current()->load_lock);
   // printf("thread creation finished, tid: %d\n", tid);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
-  // struct list_elem *e;
-  // struct thread *t;
-  // for (e = list_front(&thread_current()->list_child); e != list_end(&thread_current()->list_child); e = list_next(e)){
-  //   t = list_entry(e, struct thread, elem_child);
-  //   if (t->tid == tid) {
-  //     lock_acquire(&t->memory_lock);
-  //   }
-  // }
-  lock_acquire(&thread_current()->child->memory_lock);
+  struct list_elem *e;
+  struct thread *t;
+  for (e = list_front(&thread_current()->list_child); e != list_end(&thread_current()->list_child); e = list_next(e)){
+    t = list_entry(e, struct thread, elem_child);
+    // if (t->tid == tid) {
+    //   lock_acquire(&t->memory_lock);
+    // }
+    if (t->exit_code == -1) {
+      return process_wait(tid);
+    }
+  }
+  // lock_acquire(&thread_current()->child->memory_lock);
   return tid;
 }
 
@@ -103,8 +107,10 @@ start_process (void *f_name)
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
+  sema_up(&thread_current()->parent->load_lock);
   if (!success) 
-    thread_exit ();
+    exit(-1);
+    // thread_exit();
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -155,7 +161,8 @@ process_wait (tid_t child_tid)
       // printf("Removing child\n");
       list_remove(&t->elem_child);
       // printf("Releaseing memory lock\n");
-      lock_release(&t->memory_lock);
+      // lock_release(&t->memory_lock);
+      sema_up(&t->memory_lock);
       return t->exit_code;
     }
   }
@@ -187,7 +194,8 @@ process_exit (void)
     }
   // printf("Releasing child lock\n");
   sema_up(&curr->child_lock);
-  lock_acquire(&curr->memory_lock);
+  // lock_acquire(&curr->memory_lock);
+  sema_down(&curr->memory_lock);
   // printf("Acquired memory lock");
 }
 

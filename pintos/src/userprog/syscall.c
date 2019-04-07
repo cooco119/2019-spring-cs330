@@ -5,6 +5,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "filesys/file.h"
+#include "threads/synch.h"
 
 struct file 
   {
@@ -29,9 +30,12 @@ void seek (int fd, unsigned position);
 unsigned tell (int fd);
 void close (int fd);
 
+struct lock file_lock;
+
 void
 syscall_init (void) 
 {
+  lock_init(&file_lock);
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
@@ -165,12 +169,15 @@ bool remove_file (const char *file) {
 
 int open (const char *file) {
   int i = 0;
+  int res = -1;
   if (file == NULL){
     exit(-1);
   }
+  lock_acquire(&file_lock);
+  // printf("Opening %s\n", file);
   struct file *open_file = filesys_open(file);
   if (open_file == NULL) {
-    return -1;
+    res = -1;
   }
   else {
     for (i = 3; i < 128; i++) {
@@ -181,10 +188,14 @@ int open (const char *file) {
           // printf("denied write to %s\n", file);
         }
         thread_current()->files[i] = open_file;
-        return i;
+        res = i;
+        break;
       }
     }
   }
+  // printf("Releasing lock\n");
+  lock_release(&file_lock);
+  return res;
 }
 
 int filesize (int fd) {
@@ -194,7 +205,9 @@ int filesize (int fd) {
 int read (int fd, void *buffer, unsigned size) {
   int i;
   int STDIN = 0;
+  int res = -1;
 
+  lock_acquire(&file_lock);
   if (fd == STDIN) {
     char *tmp = malloc(sizeof(char) * size);
     for (i = 0; i < size; i++) {
@@ -204,28 +217,33 @@ int read (int fd, void *buffer, unsigned size) {
       }
     }
     buffer = (void *) tmp;
-    return i;
+    res = i;
   }
   else if (fd >= 3) {
     if (thread_current()->files[fd] == NULL) {
-      return exit(-1);
+      res = exit(-1);
     }
-    return file_read(thread_current()->files[fd], buffer, size);
+    res = file_read(thread_current()->files[fd], buffer, size);
   }
+  lock_release(&file_lock);
+  return res;
 }
 
 int write (int fd, const void *buffer, unsigned size) {
   int STDOUT = 1;
+  int res = -1;
 
+  lock_acquire(&file_lock);
   if (fd == STDOUT) {
     putbuf (buffer, size);
-    return size;
+    res = size;
   }
   else if (fd >= 3) {
-    return file_write(thread_current()->files[fd], buffer, size);
+    res = file_write(thread_current()->files[fd], buffer, size);
   }
 
-  return -1;
+  lock_release(&file_lock);
+  return res;
 }
 
 void seek (int fd, unsigned position) {
