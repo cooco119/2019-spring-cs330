@@ -32,19 +32,13 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
-  char *token, *save_ptr;
+  char *token, *save_ptr = malloc(sizeof(char));
   int i;
 
   argc = 0;
   argv = (char **) malloc(sizeof(char *) * 14);
 
-  // printf("filename @execute param : %s\n", file_name);
-  for (token = strtok_r (file_name, " ", &save_ptr); token != NULL;
-      token = strtok_r (NULL, " ", &save_ptr)){
-    argv[argc] = token;
-    // printf("argc: %d, argv[argc]: %s\n", argc, argv[argc]);
-    argc++;
-  }
+  
 
   // for (i = 0; i < argc + 1; i++) {
   //   printf("argc: %d, argv[%d]: %s\n", i, i, argv[i]);
@@ -55,7 +49,15 @@ process_execute (const char *file_name)
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, argv[0], PGSIZE);
+  strlcpy (fn_copy, file_name, PGSIZE);
+
+  // printf("filename @execute param : %s, filename pointer: %p, token : %p, saveptr: %p\n", fn_copy, fn_copy, token, save_ptr);
+  for (token = strtok_r (fn_copy, " ", &save_ptr); token != NULL;
+      token = strtok_r (NULL, " ", &save_ptr)){
+    argv[argc] = token;
+    // printf("argc: %d, argv[argc]: %s\n", argc, argv[argc]);
+    argc++;
+  }
 
   if (filesys_open(argv[0]) == NULL) {
     return -1;
@@ -64,6 +66,7 @@ process_execute (const char *file_name)
   /* Create a new thread to execute FILE_NAME. */
   // printf("filename @execute : %s\n", fn_copy);
   tid = thread_create (argv[0], PRI_DEFAULT, start_process, fn_copy);
+  // printf("thread creation finished, tid: %d\n", tid);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   // struct list_elem *e;
@@ -96,6 +99,7 @@ start_process (void *f_name)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
+  // printf("Load success? %s\n", success ? "true" : "false");
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -130,13 +134,28 @@ process_wait (tid_t child_tid)
   if (child == NULL) {
     return -1;
   }
-  if (child_tid == child->tid) {
-    sema_down(&child->child_lock);
-    thread_current()->child = NULL;
-    lock_release(&child->memory_lock);
-    return child->exit_code;
-  }
+  // if (child_tid == child->tid) {
+  //   sema_down(&child->child_lock);
+  //   thread_current()->child == NULL;
+  //   lock_release(&child->memory_lock);
+  //   return child->exit_code;
+  // }
 
+  struct list_elem *e;
+  struct thread *t;
+  struct thread *curr = thread_current();
+  for (e = list_front(&curr->list_child); e != list_end(&curr->list_child); e = list_next(e)){
+    t = list_entry(e, struct thread, elem_child);
+    if (t->tid == child_tid){
+      // printf("waiting child %s\n", t->name);
+      sema_down(&t->child_lock);
+      // printf("Removing child\n");
+      list_remove(&t->elem_child);
+      // printf("Releaseing memory lock\n");
+      lock_release(&t->memory_lock);
+      return t->exit_code;
+    }
+  }
   return -1;
 }
 
@@ -305,9 +324,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
       if (file_ofs < 0 || file_ofs > file_length (file))
         goto done;
       file_seek (file, file_ofs);
+      // printf("File length pass\n");
 
       if (file_read (file, &phdr, sizeof phdr) != sizeof phdr)
         goto done;
+      // printf("File read pass\n");
       file_ofs += sizeof phdr;
       switch (phdr.p_type) 
         {
@@ -348,9 +369,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
               if (!load_segment (file, file_page, (void *) mem_page,
                                  read_bytes, zero_bytes, writable))
                 goto done;
+              // printf("load segment pass\n");
             }
           else
             goto done;
+          // printf("validate segment pass\n");
           break;
         }
     }
@@ -358,6 +381,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* Set up stack. */
   if (!setup_stack (esp))
     goto done;
+
+  // printf("setup stack pass\n");
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
