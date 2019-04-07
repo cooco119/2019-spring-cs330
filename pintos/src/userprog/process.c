@@ -144,6 +144,9 @@ process_wait (tid_t child_tid)
   struct list_elem *e;
   struct thread *t;
   struct thread *curr = thread_current();
+  if (list_empty(&curr->list_child)) {
+    return -1;
+  }
   for (e = list_front(&curr->list_child); e != list_end(&curr->list_child); e = list_next(e)){
     t = list_entry(e, struct thread, elem_child);
     if (t->tid == child_tid){
