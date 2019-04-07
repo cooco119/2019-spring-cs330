@@ -4,6 +4,14 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "filesys/file.h"
+
+struct file 
+  {
+    struct inode *inode;        /* File's inode. */
+    off_t pos;                  /* Current position. */
+    bool deny_write;            /* Has file_deny_write() been called? */
+  };
 
 static void syscall_handler (struct intr_frame *);
 
@@ -167,6 +175,11 @@ int open (const char *file) {
   else {
     for (i = 3; i < 128; i++) {
       if (thread_current()->files[i] == NULL) {
+        // printf("filename: %s, threadname: %s\n", file, thread_current()->name);
+        if (strcmp(thread_current()->name, file) == 0){
+          file_deny_write(open_file);
+          // printf("denied write to %s\n", file);
+        }
         thread_current()->files[i] = open_file;
         return i;
       }
@@ -209,7 +222,7 @@ int write (int fd, const void *buffer, unsigned size) {
     return size;
   }
   else if (fd >= 3) {
-    return file_read(thread_current()->files[fd], buffer, size);
+    return file_write(thread_current()->files[fd], buffer, size);
   }
 
   return -1;
