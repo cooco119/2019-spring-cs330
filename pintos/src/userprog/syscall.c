@@ -7,12 +7,12 @@
 #include "filesys/file.h"
 #include "threads/synch.h"
 
-struct file 
-  {
-    struct inode *inode;        /* File's inode. */
-    off_t pos;                  /* Current position. */
-    bool deny_write;            /* Has file_deny_write() been called? */
-  };
+// struct file 
+//   {
+//     struct inode *inode;        /* File's inode. */
+//     off_t pos;                  /* Current position. */
+//     bool deny_write;            /* Has file_deny_write() been called? */
+//   };
 
 static void syscall_handler (struct intr_frame *);
 
@@ -30,12 +30,12 @@ void seek (int fd, unsigned position);
 unsigned tell (int fd);
 void close (int fd);
 
-struct lock file_lock;
+struct semaphore file_lock;
 
 void
 syscall_init (void) 
 {
-  lock_init(&file_lock);
+  sema_init(&file_lock, 1);
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
@@ -169,15 +169,15 @@ bool remove_file (const char *file) {
 
 int open (const char *file) {
   int i = 0;
-  int res = -1;
   if (file == NULL){
     exit(-1);
   }
-  lock_acquire(&file_lock);
+  sema_down(&file_lock);
   // printf("Opening %s\n", file);
   struct file *open_file = filesys_open(file);
   if (open_file == NULL) {
-    res = -1;
+    sema_up(&file_lock);
+    return -1;
   }
   else {
     for (i = 3; i < 128; i++) {
@@ -188,14 +188,15 @@ int open (const char *file) {
           // printf("denied write to %s\n", file);
         }
         thread_current()->files[i] = open_file;
-        res = i;
+        sema_up(&file_lock);
+        return i;
         break;
       }
     }
   }
   // printf("Releasing lock\n");
-  lock_release(&file_lock);
-  return res;
+  sema_up(&file_lock);
+  return -1;
 }
 
 int filesize (int fd) {
@@ -205,9 +206,8 @@ int filesize (int fd) {
 int read (int fd, void *buffer, unsigned size) {
   int i;
   int STDIN = 0;
-  int res = -1;
 
-  lock_acquire(&file_lock);
+  sema_down(&file_lock);
   if (fd == STDIN) {
     char *tmp = malloc(sizeof(char) * size);
     for (i = 0; i < size; i++) {
@@ -217,33 +217,37 @@ int read (int fd, void *buffer, unsigned size) {
       }
     }
     buffer = (void *) tmp;
-    res = i;
+    sema_up(&file_lock);
+    return i;
   }
   else if (fd >= 3) {
     if (thread_current()->files[fd] == NULL) {
-      res = exit(-1);
+      sema_up(&file_lock);
+      return exit(-1);
     }
-    res = file_read(thread_current()->files[fd], buffer, size);
+    sema_up(&file_lock);
+    return file_read(thread_current()->files[fd], buffer, size);
   }
-  lock_release(&file_lock);
-  return res;
+  sema_up(&file_lock);
+  return -1;
 }
 
 int write (int fd, const void *buffer, unsigned size) {
   int STDOUT = 1;
-  int res = -1;
 
-  lock_acquire(&file_lock);
+  sema_down(&file_lock);
   if (fd == STDOUT) {
     putbuf (buffer, size);
-    res = size;
+    sema_up(&file_lock);
+    return size;
   }
   else if (fd >= 3) {
-    res = file_write(thread_current()->files[fd], buffer, size);
+    sema_up(&file_lock);
+    return file_write(thread_current()->files[fd], buffer, size);
   }
 
-  lock_release(&file_lock);
-  return res;
+  sema_up(&file_lock);
+  return -1;
 }
 
 void seek (int fd, unsigned position) {
