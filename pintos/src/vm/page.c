@@ -1,4 +1,8 @@
 #include "vm/page.h"
+#include "vm/frame.h"
+#include "lib/kernel/list.h"
+#include "threads/synch.h"
+#include "threads/thread.h"
 
 /*
  * Initialize supplementary page table

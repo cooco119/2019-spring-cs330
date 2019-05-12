@@ -34,6 +34,7 @@
 #include "filesys/filesys.h"
 #include "filesys/fsutil.h"
 #endif
+#include "vm/frame.h"
 
 /* Amount of physical memory, in 4 kB pages. */
 size_t ram_pages;
@@ -93,6 +94,7 @@ main (void)
   tss_init ();
   gdt_init ();
 #endif
+  frame_init();
 
   /* Initialize interrupt handlers. */
   intr_init ();
