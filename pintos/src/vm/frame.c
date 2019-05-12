@@ -3,6 +3,7 @@
 #include "threads/thread.h"
 #include "threads/malloc.h"
 #include "threads/vaddr.h"
+#include "threads/palloc.h"
 
 static struct lock frame_lock;
 static struct list frame_table;
@@ -37,12 +38,31 @@ allocate_frame (void *addr)
     {
         return false;
     }
-    frame->spte->user_vaddr = addr;
-    frame->spte->kernel_addr = (void*) vtop(addr);
+    frame->spte = allocate_page(addr);
 
     lock_acquire(&frame_lock);
     list_push_back(&frame_table, &frame->elem);
     lock_release(&frame_lock);
 
     return true;
+}
+
+bool
+free_frame (void *addr)
+{
+    struct frame_table_entry *frame;
+    struct list_elem *e;
+    
+    lock_acquire(&frame_lock);
+    for (e = list_front(&frame_table); e != list_back(&frame_table); e = list_next(e))
+    {
+        frame = list_entry(e, struct frame_table_entry, elem);
+        if (frame->spte->user_vaddr == addr)
+        {
+            palloc_free_page(addr);
+            list_remove(e);
+            return;
+        }
+    }
+    lock_release(&frame_lock);
 }

@@ -99,6 +99,9 @@ struct thread
     struct semaphore load_lock;
     struct thread *parent;
 
+    struct list supt;
+    struct lock supt_lock;
+
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 

@@ -13,6 +13,7 @@
 #include "threads/vaddr.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "vm/page.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -460,6 +461,9 @@ init_thread (struct thread *t, const char *name, int priority)
   list_push_back(&running_thread()->list_child, &(t->elem_child));
   running_thread()->child = t;
   t->parent = running_thread();
+
+  list_init(&t->supt);
+  lock_init(&t->supt_lock);
 
 }
 

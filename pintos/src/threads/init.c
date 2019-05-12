@@ -35,6 +35,7 @@
 #include "filesys/fsutil.h"
 #endif
 #include "vm/frame.h"
+#include "vm/page.h"
 
 /* Amount of physical memory, in 4 kB pages. */
 size_t ram_pages;

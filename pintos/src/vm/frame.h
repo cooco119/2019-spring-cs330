@@ -13,5 +13,6 @@ struct frame_table_entry
 
 void frame_init (void);
 bool allocate_frame (void *addr);
+bool free_frame (void *addr);
 
 #endif /* vm/frame.h */
