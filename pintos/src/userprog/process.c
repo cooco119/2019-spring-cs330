@@ -489,14 +489,14 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
       /* Get a page of memory. */
       uint8_t *kpage = palloc_get_page (PAL_USER);
-      allocate_frame(kpage);
+      struct frame_table_entry *frame = allocate_frame(kpage);
       if (kpage == NULL)
         return false;
 
       /* Load this page. */
       if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
         {
-          free_frame (kpage);
+          free_frame (frame, kpage);
           return false; 
         }
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
@@ -504,9 +504,15 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       /* Add the page to the process's address space. */
       if (!install_page (upage, kpage, writable)) 
         {
-          free_frame (kpage);
+          free_frame (frame, kpage);
           return false; 
         }
+      
+      if (!frame_install_page(frame, upage))
+      {
+        free_frame (frame, kpage);
+        return false;
+      }
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
@@ -525,6 +531,7 @@ setup_stack (void **esp)
   int i, len, arg_len = 0;
 
   kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+  struct frame_table_entry *frame = allocate_frame(kpage);
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
@@ -570,7 +577,7 @@ setup_stack (void **esp)
       }
       else{
         printf("install page failed\n");
-        free_frame (kpage);
+        free_frame (frame, kpage);
       }
     }
   return success;

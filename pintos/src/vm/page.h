@@ -5,29 +5,37 @@
 #include "lib/kernel/list.h"
 #include <hash.h>
 #include <debug.h>
+#include "vm/frame.h"
 
-enum page_state
+enum page_location
 {
 	ON_FRAME,
 	ON_SWAP,
 	NONE
 };
 
+enum page_state
+{
+	ACTIVE,
+	INACTIVE
+};
+
 struct sup_page_table_entry 
 {
 	uint32_t* user_vaddr;
-	uint32_t* kernel_addr;
 	uint64_t access_time;
 
 	bool dirty;
 	bool accessed;
-	enum page_state state;
+	enum page_location loc;
 
 	struct list_elem elem;
 };
 
 struct list *page_init (void);
 struct sup_page_table_entry *allocate_page (void *addr);
+struct sup_page_table_entry* find_page(void *addr);
+bool load_page(void *addr, uint32_t *pd);
 void free_page(struct list *supt, void *addr);
 
 

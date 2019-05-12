@@ -22,47 +22,43 @@ frame_init (void)
 /* 
  * Make a new frame table entry for addr.
  */
-bool
+struct frame_table_entry*
 allocate_frame (void *addr)
 {
     struct frame_table_entry *frame = (struct frame_table_entry *) malloc(sizeof(struct frame_table_entry));
-    struct sup_page_table_entry *page = (struct sup_page_table_entry *) malloc(sizeof(struct sup_page_table_entry));
     if (frame == NULL)
     {
-        return false;
+        return NULL;
     }
     frame->frame = &frame_table;
     frame->owner = thread_current();
-    frame->spte = page;
-    if (frame->spte == NULL)
-    {
-        return false;
-    }
-    frame->spte = allocate_page(addr);
+    frame->spte = NULL;
 
     lock_acquire(&frame_lock);
     list_push_back(&frame_table, &frame->elem);
     lock_release(&frame_lock);
 
-    return true;
+    return frame;
 }
 
 bool
-free_frame (void *addr)
+free_frame (struct frame_table_entry *frame, void *addr)
 {
-    struct frame_table_entry *frame;
-    struct list_elem *e;
-    
     lock_acquire(&frame_lock);
-    for (e = list_front(&frame_table); e != list_back(&frame_table); e = list_next(e))
-    {
-        frame = list_entry(e, struct frame_table_entry, elem);
-        if (frame->spte->user_vaddr == addr)
-        {
-            palloc_free_page(addr);
-            list_remove(e);
-            return;
-        }
-    }
+    palloc_free_page(addr);
+    list_remove(&frame->elem);
+    free(frame);
     lock_release(&frame_lock);
+}
+
+bool
+frame_install_page (struct frame_table_entry *frame, void *addr)
+{
+    struct sup_page_table_entry *page = allocate_page(addr);
+    if (page == NULL)
+        return false;
+
+    frame->spte = page;
+
+    return true;
 }
