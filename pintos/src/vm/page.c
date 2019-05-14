@@ -6,6 +6,8 @@
 #include "threads/vaddr.h"
 #include "devices/timer.h"
 #include "userprog/pagedir.h"
+#include "vm/swap.h"
+#include "threads/palloc.h"
 
 struct list *supt_list;
 
@@ -62,6 +64,8 @@ find_page(void *addr)
     struct thread *curr = thread_current();
     struct sup_page_table_entry *page;
     struct list_elem *e;
+    addr = pg_round_down(addr);
+    // printf("finding page in %p\n", addr);
 
     for(e = list_front(&curr->supt); e != list_back(&curr->supt); e = list_next(e))
     {
@@ -80,9 +84,10 @@ load_page(void *addr, uint32_t *pd)
     struct sup_page_table_entry *page = find_page(addr);
     if (page != NULL)
     {
-        struct frame_table_entry *frame = allocate_frame(addr);
+        struct frame_table_entry *frame = allocate_frame(PAL_USER, addr);
         frame->spte = page;
         if (frame == NULL){
+            printf("frame alloc failed\n");
             return false;
         }
         
@@ -90,9 +95,11 @@ load_page(void *addr, uint32_t *pd)
         {
         case ON_FRAME:
             page->frame = frame;
+            addr = pagedir_get_page(pd, page->user_vaddr);
             break;
         
         case ON_SWAP:
+            swap_in(addr);
             break;
         
         case NONE:
@@ -104,18 +111,21 @@ load_page(void *addr, uint32_t *pd)
 
         if (!pagedir_set_page(pd, addr, frame, true))
         {
-            free_frame(addr, (void *) frame);
+            free_frame(frame->frame);
+            printf("pagedir setting fail\n");
             return false;
         }
 
         page->loc = ON_FRAME;
         page->active = true;
-        pagedir_set_dirty(pd, addr, false);
+        pagedir_set_dirty(pd, frame->frame, false);
 
         return true;
     }
-    else
+    else{
+        printf("page not found\n");
         return false;
+    }
 }
 
 void
@@ -155,7 +165,7 @@ free_page_table (void)
             page = list_entry(e, struct sup_page_table_entry, elem);
             if (page->loc == ON_FRAME)
             {
-                free_frame(page->frame, page->user_vaddr);
+                free_frame(page->frame->frame);
             }
             if (page->loc == ON_SWAP)
             {

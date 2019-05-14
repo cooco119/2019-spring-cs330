@@ -2,7 +2,15 @@
 #include "devices/disk.h"
 #include "threads/synch.h"
 #include <bitmap.h>
+#include "vm/page.h"
+#include "vm/frame.h"
+#include "userprog/pagedir.h"
+#include "threads/thread.h"
+#include "threads/vaddr.h"
+#include "threads/palloc.h"
 
+static const size_t SECTOR_PER_PAGE = PGSIZE / DISK_SECTOR_SIZE;
+static size_t swap_size;
 
 /* The swap device */
 static struct disk *swap_device;
@@ -19,7 +27,10 @@ static struct lock swap_lock;
 void 
 swap_init (void)
 {
-
+    swap_device = disk_get(1, 1);
+    swap_size = disk_size(swap_device) / SECTOR_PER_PAGE;
+    swap_table = bitmap_create(swap_size);
+    lock_init(&swap_lock);
 }
 
 /*
@@ -37,8 +48,22 @@ swap_init (void)
 bool 
 swap_in (void *addr)
 {
+    bool success = false;
+    lock_acquire(&swap_lock);
+    struct sup_page_table_entry *page = find_page(addr);
+    if (page->loc != ON_SWAP)
+    {
+        lock_release(&swap_lock);
+        return false;
+    }
 
+    struct frame_table_entry *frame = allocate_frame(PAL_USER, addr);
+    success = read_from_disk(frame->frame, page->swap_index);
+    success = success & frame_install_page(frame, addr);
+    lock_release(&swap_lock);
+    page->swap_index = -1;
 
+    return success;
 }
 
 /* 
@@ -58,24 +83,46 @@ swap_in (void *addr)
 bool
 swap_out (void)
 {
+    bool success = false;
+    struct thread *curr = thread_current();
+    struct frame_table_entry *frame;
 
+    frame = select_frame_to_evict();
 
+    struct sup_page_table_entry *page = frame->spte;
+    pagedir_clear_page(curr->pagedir, frame->frame);
+    free_frame(frame->frame);
+    page->loc = ON_SWAP;
+
+    size_t swap_index = bitmap_scan_and_flip(swap_table, 0, 1, false);
+    success = write_to_disk(frame->frame, swap_index);
+    page->swap_index = swap_index;
+
+    return success;
 }
 
 /* 
  * Read data from swap device to frame. 
  * Look at device/disk.c
  */
-void read_from_disk (uint8_t *frame, int index)
+bool read_from_disk (uint8_t *frame, int index)
 {
-
-
+    size_t i;
+    for (i = 0; i < SECTOR_PER_PAGE; i++)
+    {
+        disk_read(swap_device, index * SECTOR_PER_PAGE + i, frame + (DISK_SECTOR_SIZE * i));
+    }
+    return true;
 }
 
 /* Write data to swap device from frame */
-void write_to_disk (uint8_t *frame, int index)
+bool write_to_disk (uint8_t *frame, int index)
 {
-
-
+    size_t i;
+    for (i = 0; i < SECTOR_PER_PAGE; i++)
+    {
+        disk_write(swap_device, index * SECTOR_PER_PAGE + i, frame + (DISK_SECTOR_SIZE * i));
+    }
+    return true;
 }
 

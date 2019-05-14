@@ -31,6 +31,8 @@ struct sup_page_table_entry
 	struct frame_table_entry *frame;
 	bool active;
 
+	int swap_index;
+
 	struct list_elem elem;
 };
 
