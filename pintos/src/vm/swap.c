@@ -62,6 +62,7 @@ swap_in (void *addr)
     success = success & frame_install_page(frame, addr);
     lock_release(&swap_lock);
     page->swap_index = -1;
+    page->loc = ON_FRAME;
 
     return success;
 }

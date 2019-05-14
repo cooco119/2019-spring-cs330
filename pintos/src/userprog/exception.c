@@ -166,9 +166,10 @@ page_fault (struct intr_frame *f)
     success = true;
   }
 
-  if (PHYS_BASE - MAX_STACK_SIZE <= fault_addr && fault_addr < PHYS_BASE)
+  if (f->esp <= fault_addr && PHYS_BASE - MAX_STACK_SIZE <= fault_addr && fault_addr < PHYS_BASE)
   {
-    success = success & grow_stack(curr->supt, fault_page);
+    if (find_page(fault_page) == NULL)
+      success = success & grow_stack(curr->supt, fault_page);
   }
 
   if (success){

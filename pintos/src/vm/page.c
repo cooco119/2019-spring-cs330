@@ -94,8 +94,7 @@ load_page(void *addr, uint32_t *pd)
         switch (page->loc)
         {
         case ON_FRAME:
-            page->frame = frame;
-            addr = pagedir_get_page(pd, page->user_vaddr);
+            page->frame = frame->frame;
             break;
         
         case ON_SWAP:
@@ -188,7 +187,7 @@ grow_stack(struct list supt, void *page)
 
     new_page->user_vaddr = page;
     new_page->active = true;
-    new_page->loc = ON_FRAME;
+    new_page->loc = NONE;
 
     lock_acquire(&thread_current()->supt_lock);
     list_push_back(&supt, &new_page->elem);
