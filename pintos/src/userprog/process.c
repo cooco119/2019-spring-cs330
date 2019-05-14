@@ -531,8 +531,8 @@ setup_stack (void **esp)
   bool success = false;
   int i, len, arg_len = 0;
 
-  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
-  struct frame_table_entry *frame = allocate_frame(kpage);
+  struct frame_table_entry *frame = allocate_frame(PAL_USER | PAL_ZERO, ((uint8_t *) PHYS_BASE) - PGSIZE);
+  kpage = frame->frame;
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
