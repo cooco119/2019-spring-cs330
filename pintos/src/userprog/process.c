@@ -193,6 +193,7 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+  free_page_table();
   // printf("Releasing child lock\n");
   sema_up(&curr->child_lock);
   // lock_acquire(&curr->memory_lock);

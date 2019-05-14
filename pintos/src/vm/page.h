@@ -28,6 +28,8 @@ struct sup_page_table_entry
 	bool dirty;
 	bool accessed;
 	enum page_location loc;
+	struct frame_table_entry *frame;
+	bool active;
 
 	struct list_elem elem;
 };
@@ -37,6 +39,8 @@ struct sup_page_table_entry *allocate_page (void *addr);
 struct sup_page_table_entry* find_page(void *addr);
 bool load_page(void *addr, uint32_t *pd);
 void free_page(struct list *supt, void *addr);
+void free_page_table (void);
+bool grow_stack(struct list supt, void *page);
 
 
 #endif /* vm/page.h */
