@@ -155,53 +155,99 @@ page_fault (struct intr_frame *f)
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
-  if (!user) {
-    // printf("not user\n");
-     exit(-1); 
-  }
-  if (is_kernel_vaddr(fault_addr)){
-    // printf("kernel addr\n");
-    exit(-1);
-  }
+  
+  void *esp = user ? f->esp : curr->esp;
 
   void *fault_page = pg_round_down(fault_addr);
-  // printf("fault page : %p\n", fault_page);
 
-  if (! load_page(fault_page, curr->pagedir))
+  bool stack_frame = esp <= fault_addr || fault_addr == f->esp - 4 || fault_addr == f->esp - 32;
+  bool stack_range = PHYS_BASE - MAX_STACK_SIZE <= fault_addr && fault_addr < PHYS_BASE;
+
+  // printf("stack bottom: %p\n", PHYS_BASE - MAX_STACK_SIZE);
+  // printf("fault page : %p\n", fault_page);
+  // if (not_present) printf("not present\n");
+  // if (stack_frame) 
+  //   printf("fault addr in stack frame: %p\n", fault_addr);
+  // if (stack_range)
+  //   printf("fault addr in stack range\n");
+
+  if (not_present)
   {
-    printf("Page fault at %p: loading page falied\n", fault_addr);
+    // printf("not present\n");
+    struct sup_page_table_entry *page = find_page(curr->supt, fault_page);
+    if (stack_frame && stack_range)
+    {
+      if (page == NULL){
+        // printf("growing stack\n");
+        grow_stack(curr->supt, fault_page);
+      }
+    }
+    // if (page)
+    // {
+    // printf("loading page\n");
+    success = load_page(fault_page, curr->pagedir);
+    // }
+    // else 
+    // else if (user && fault_addr - f->esp == -4096)
+    // {
+    //   exit(-1);
+    // }
+  }
+
+  // printf("%s\n", success ? "success" : "failed");
+  if (success) return;
+
+  // if (! load_page(fault_page, curr->pagedir))
+  // {
+  //   printf("Page fault at %p: loading page falied\n", fault_addr);
+  //   kill (f);
+  // }
+  // else {
+  //   success = true;
+  // }
+
+  // if (f->esp <= fault_addr && PHYS_BASE - MAX_STACK_SIZE <= fault_addr && fault_addr < PHYS_BASE)
+  // {
+  //   if (find_page(thread_current()->supt, fault_page) == NULL)
+  //     success = success & grow_stack(curr->supt, fault_page);
+  // }
+
+  // if (success){
+  //   // printf("Successfully handled page fault\n");
+  //   return;
+  // }
+  if (!success){
+
+    if (!user) {
+      // printf("not user\n");
+      // thread_exit();
+      exit(-1); 
+      // f->eip = (void *) f->eax;
+      // f->eax = 0xffffffff;
+      // return;
+    }
+    if (is_kernel_vaddr(fault_addr)){
+      // printf("kernel addr\n");
+      exit(-1);
+    }
+  
+  // if (not_present) {
+  //   // printf("not present\n");
+  //   exit(-1);
+  // }
+
+    /* To implement virtual memory, delete the rest of the function
+      body, and replace it with code that brings in the page to
+      which fault_addr refers. */
+    printf ("Page fault at %p: %s error %s page in %s context.\n",
+            fault_addr,
+            not_present ? "not present" : "rights violation",
+            write ? "writing" : "reading",
+            user ? "user" : "kernel");
     kill (f);
   }
-  else {
-    success = true;
-  }
-
-  if (f->esp <= fault_addr && PHYS_BASE - MAX_STACK_SIZE <= fault_addr && fault_addr < PHYS_BASE)
-  {
-    if (find_page(thread_current()->supt, fault_page) == NULL)
-      success = success & grow_stack(curr->supt, fault_page);
-  }
-
-  if (success){
-    // printf("Successfully handled page fault\n");
-    return;
-  }
-  
-  if (not_present) {
-    // printf("not present\n");
-    exit(-1);
-  }
 
 
-  /* To implement virtual memory, delete the rest of the function
-     body, and replace it with code that brings in the page to
-     which fault_addr refers. */
-  printf ("Page fault at %p: %s error %s page in %s context.\n",
-          fault_addr,
-          not_present ? "not present" : "rights violation",
-          write ? "writing" : "reading",
-          user ? "user" : "kernel");
-  kill (f);
 
 }
 

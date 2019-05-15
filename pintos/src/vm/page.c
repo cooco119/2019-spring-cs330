@@ -82,19 +82,28 @@ find_page(struct list supt, void *addr)
     // printf("finding page in %p\n", addr);
 
     if (list_empty(&supt)) return NULL;
-    for(e = list_front(&supt); e != list_end(&supt); e = list_next(e))
+    for(e = (&supt.head)->next; e != &supt.tail; e = e->next)
     {
         page = list_entry(e, struct sup_page_table_entry, elem);
         // if (addr > 0x8240000)
         // {
-        //     printf("page addr : %p, uaddr: %p\n", page->user_vaddr, addr);
+            // printf("page addr : %p, uaddr: %p\n", page->user_vaddr, addr);
         // }
         if (page->user_vaddr == addr)
         {
             return page;
         }
+        if (e->next == &supt.tail)
+        {
+            // printf("End of list\n");
+            break;
+        }
+        if (page->user_vaddr == 0)
+        {
+            break;
+        }
     }
-    printf("page not found : %p, user addr? : %s\n", addr, is_user_vaddr(addr) ? "true": "false");
+    // printf("page not found : %p, user addr? : %s\n", addr, is_user_vaddr(addr) ? "true": "false");
     return NULL;
 }
 
@@ -128,6 +137,7 @@ load_page(void *addr, uint32_t *pd)
             break;
 
         case ON_FILE:
+            // printf("Finding in file\n");
             file_seek(page->file, page->ofs);
             uint32_t read = file_read(page->file, frame->frame, page->read_bytes);
             if (read != page->read_bytes)
@@ -170,7 +180,7 @@ load_page(void *addr, uint32_t *pd)
         return true;
     }
     else{
-        printf("page not found\n");
+        // printf("page not found\n");
         return false;
     }
 }
@@ -211,16 +221,14 @@ free_page_table (void)
         for (e = list_front(&supt); e != list_back(&supt); e = list_next(e))
         {
             page = list_entry(e, struct sup_page_table_entry, elem);
-            if (page->loc == ON_FRAME)
-            {
-                free_frame(page->frame->frame);
-            }
             if (page->loc == ON_SWAP)
             {
-
+                free_swap(page->swap_index);
             }
 
+            free_frame(page->frame);
             free(page);
+            list_remove(&page->elem);
         }
         lock_release(&thread_current()->supt_lock);
     }
@@ -238,10 +246,25 @@ grow_stack(struct list supt, void *page)
     new_page->active = true;
     new_page->loc = NONE;
 
+    // struct frame_table_entry * frame = allocate_frame(PAL_USER, page);
+    // if (frame == NULL)
+    // {
+    //     free(new_page);
+    //     return false;
+    // }
+
+    // if (!pagedir_set_page(thread_current()->pagedir, page, frame->frame, new_page->writable))
+    // {
+    //     free_frame(frame->frame);
+    //     printf("pagedir setting fail\n");
+    //     return false;
+    // }
+
     lock_acquire(&thread_current()->supt_lock);
     list_push_back(&supt, &new_page->elem);
     success = true;
     lock_release(&thread_current()->supt_lock);
+    // printf("Success growing stack\n");
 
     return success;
 }

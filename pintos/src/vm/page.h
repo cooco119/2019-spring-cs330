@@ -31,7 +31,7 @@ struct sup_page_table_entry
 	bool dirty;
 	bool accessed;
 	enum page_location loc;
-	struct frame_table_entry *frame;
+	uint32_t *frame;
 	bool active;
 
 	int swap_index;

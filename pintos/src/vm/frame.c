@@ -135,6 +135,7 @@ frame_install_page (struct frame_table_entry *frame, void *addr)
     // printf("alloc page in %p\n", addr);
     frame->spte = page;
     frame->hold = false;
+    page->loc = NONE;
 
     return true;
 }

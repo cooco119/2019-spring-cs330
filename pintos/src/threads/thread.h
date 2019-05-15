@@ -103,6 +103,8 @@ struct thread
     struct lock supt_lock;
     struct list mmap_list;
 
+    uint8_t *esp;
+
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 

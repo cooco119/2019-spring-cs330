@@ -177,7 +177,6 @@ process_exit (void)
 {
   struct thread *curr = thread_current ();
   uint32_t *pd;
-  // free_page_table();
 
   // printf("process exiting\n");
   /* Destroy the current process's page directory and switch back
@@ -200,7 +199,12 @@ process_exit (void)
   sema_up(&curr->child_lock);
   // lock_acquire(&curr->memory_lock);
   sema_down(&curr->memory_lock);
+  free_page_table();
   // printf("Acquired memory lock");
+  // if (curr->status == THREAD_DYING)
+  // {
+  //   palloc_free_page(curr);
+  // }
   // printf("process exiting finish\n");
 }
 
@@ -393,7 +397,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
           break;
         }
     }
-
+  // printf("p1\n");
   /* Set up stack. */
   if (!setup_stack (esp))
     goto done;
@@ -549,6 +553,7 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       success = success & frame_install_page(frame, ((uint8_t *) PHYS_BASE) - PGSIZE);
+      // printf("[setup stack] frame install page %s\n", success ? "success" : "failed");
       if (success){
         *esp = PHYS_BASE;
  
@@ -593,6 +598,9 @@ setup_stack (void **esp)
         printf("install page failed\n");
         free_frame (kpage);
       }
+    }
+    else {
+      printf("frame allocation failed\n");
     }
   return success;
 }
