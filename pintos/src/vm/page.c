@@ -11,6 +11,17 @@
 
 struct list *supt_list;
 
+static bool
+install_page (void *upage, void *kpage, bool writable)
+{
+  struct thread *t = thread_current ();
+
+  /* Verify that there's not already a page at that virtual
+     address, then map our page there. */
+  return (pagedir_get_page (t->pagedir, upage) == NULL
+          && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
 /*
  * Initialize supplementary page table
  */
@@ -125,7 +136,11 @@ load_page(void *addr, uint32_t *pd)
             }
             memset (frame->frame + read, 0, page->zero_bytes);
             writable = page->writable;
-
+            // if (!install_page (addr, frame->frame, writable)) 
+            //   {
+            //     free_frame (frame->frame);
+            //     return false; 
+            //   }
             // if (!frame_install_page(frame, upage))
       // {
       //   printf("frame install failed\n");
@@ -145,7 +160,7 @@ load_page(void *addr, uint32_t *pd)
             return false;
         }
 
-        page->loc = ON_FRAME;
+        page->loc = ON_FILE;
         page->active = true;
         pagedir_set_dirty(pd, frame->frame, false);
         page->access_time = timer_ticks();

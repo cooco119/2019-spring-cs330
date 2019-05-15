@@ -67,7 +67,7 @@ swap_in (void *addr, struct sup_page_table_entry *page)
     bitmap_set(swap_table, page->swap_index, false);
     lock_release(&swap_lock);
     page->swap_index = -1;
-    page->loc = ON_FRAME;
+    page->loc = ON_FILE;
 
     // printf("swap in %s\n", success ? "success" : "failed");
     return success;

@@ -164,6 +164,7 @@ process_wait (tid_t child_tid)
       // printf("Releaseing memory lock\n");
       // lock_release(&t->memory_lock);
       sema_up(&t->memory_lock);
+      // printf("waiting finish\n");
       return t->exit_code;
     }
   }
@@ -178,6 +179,7 @@ process_exit (void)
   uint32_t *pd;
   // free_page_table();
 
+  // printf("process exiting\n");
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = curr->pagedir;
@@ -199,6 +201,7 @@ process_exit (void)
   // lock_acquire(&curr->memory_lock);
   sema_down(&curr->memory_lock);
   // printf("Acquired memory lock");
+  // printf("process exiting finish\n");
 }
 
 /* Sets up the CPU for running user code in the current
