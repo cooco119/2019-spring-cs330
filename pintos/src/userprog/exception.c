@@ -159,6 +159,10 @@ page_fault (struct intr_frame *f)
     // printf("not user\n");
      exit(-1); 
   }
+  if (is_kernel_vaddr(fault_addr)){
+    // printf("kernel addr\n");
+    exit(-1);
+  }
 
   void *fault_page = pg_round_down(fault_addr);
   // printf("fault page : %p\n", fault_page);
@@ -183,12 +187,8 @@ page_fault (struct intr_frame *f)
     return;
   }
   
-  if (is_kernel_vaddr(fault_addr)){
-    printf("kernel addr\n");
-    exit(-1);
-  }
   if (not_present) {
-    printf("not present\n");
+    // printf("not present\n");
     exit(-1);
   }
 
