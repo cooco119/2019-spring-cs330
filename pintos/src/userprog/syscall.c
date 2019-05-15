@@ -6,6 +6,9 @@
 #include "threads/vaddr.h"
 #include "filesys/file.h"
 #include "threads/synch.h"
+#include "threads/malloc.h"
+#include "vm/page.h"
+#include "userprog/process.h"
 
 // struct file 
 //   {
@@ -29,6 +32,8 @@ int write (int fd, const void *buffer, unsigned size);
 void seek (int fd, unsigned position);
 unsigned tell (int fd);
 void close (int fd);
+int mmap(int fd, void *upage);
+bool munmap (int id);
 
 struct semaphore file_lock;
 
@@ -123,10 +128,109 @@ syscall_handler (struct intr_frame *f UNUSED)
       }
       close ((int) *(uint32_t*) (f->esp + 4));
       break;
+    case SYS_MMAP:
+      if (! is_user_vaddr(f->esp + 4) || ! is_user_vaddr(f->esp + 8)){
+        exit(-1);
+      }
+      f->eax = mmap((int) *(uint32_t*) f->esp + 4, (void*) *(uint32_t*) f->esp + 8);
+      break;
+    case SYS_MUNMAP:
+      if (! is_user_vaddr(f->esp + 4)){
+        exit(-1);
+      }
+      f->eax = munmap((int) *(uint32_t*) f->esp + 4);
+      break;
     default:
       break; 
   }
   // thread_exit ();
+}
+
+int mmap(int fd, void * upage)
+{
+  struct thread *curr = thread_current();
+  sema_down(&file_lock);
+
+  struct file *f = curr->files[fd];
+  f = file_reopen(f);
+
+  size_t file_size = file_length(f);
+
+  size_t ofs; void *addr;
+  struct sup_page_table_entry *supt;
+  for (ofs = 0; ofs < file_size; ofs += PGSIZE)
+  {
+    addr = upage + ofs;
+    supt = find_page(curr->supt, addr);
+    if (supt != NULL)
+    {
+      goto FAIL;
+    }
+  }
+
+  size_t read_bytes, zero_bytes;
+  for (ofs = 0; ofs < file_size; ofs += PGSIZE)
+  {
+    addr = upage + ofs;
+    read_bytes = (ofs + PGSIZE < file_size) ? PGSIZE : file_size - ofs;
+    zero_bytes = PGSIZE - read_bytes;
+
+    install_from_file (&curr->supt, addr, f, ofs, read_bytes, zero_bytes, true);
+    
+  }
+
+  int id;
+  if (! list_empty(&curr->mmap_list))
+  {
+    id = list_entry(list_back(&curr->mmap_list), struct mmapd, elem)->id + 1;
+  }
+  else id = 1;
+
+  struct mmapd *mmap_i = (struct mmapd*) malloc(sizeof(struct mmapd));
+  mmap_i->id = id;
+  mmap_i->file = f;
+  mmap_i->addr = upage;
+  mmap_i->size = file_size;
+  list_push_back(&curr->mmap_list, &mmap_i->elem);
+
+  sema_up(&file_lock);
+
+  return id;
+  FAIL:
+  return -1;
+}
+
+bool munmap (int id)
+{
+  struct thread *curr = thread_current();
+  struct mmapd *mmap_i = NULL;
+  struct list_elem *e;
+  if (! list_empty(&curr->mmap_list))
+  {
+    for (e = list_begin(&curr->mmap_list); e != list_end(&curr->mmap_list); e = list_next(e))
+    {
+      mmap_i = list_entry(e, struct mmapd, elem);
+      if (mmap_i->id == id) break;
+    }
+  }
+  if (mmap_i == NULL) return false;
+  sema_down(&file_lock);
+
+  size_t ofs, file_size = mmap_i->size;
+  void *addr;
+  for (ofs = 0; ofs < file_size; ofs += PGSIZE)
+  {
+    addr = mmap_i->addr + ofs;
+    page_unmap(curr->supt, curr->pagedir, addr, mmap_i->file, ofs);
+  }
+
+  list_remove(&mmap_i->elem);
+  free(mmap_i);
+
+  sema_up(&file_lock);
+
+  return true;
+
 }
 
 void halt(void) {

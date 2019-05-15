@@ -464,7 +464,7 @@ init_thread (struct thread *t, const char *name, int priority)
 
   list_init(&t->supt);
   lock_init(&t->supt_lock);
-
+  list_init(&t->mmap_list);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

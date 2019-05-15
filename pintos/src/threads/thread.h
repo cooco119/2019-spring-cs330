@@ -101,6 +101,7 @@ struct thread
 
     struct list supt;
     struct lock supt_lock;
+    struct list mmap_list;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */

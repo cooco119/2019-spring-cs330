@@ -52,5 +52,5 @@ void free_page(struct list *supt, void *addr);
 void free_page_table (void);
 bool grow_stack(struct list supt, void *page);
 bool install_from_file (struct list *supt, void *uaddr, struct file *file, off_t ofs, uint32_t read_bytes, uint32_t zero_bytes, bool writable);
-
+bool page_unmap(struct list supt, uint32_t *pd, void* addr, struct file *f, off_t ofs);
 #endif /* vm/page.h */

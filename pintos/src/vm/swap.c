@@ -148,3 +148,7 @@ bool write_to_disk (uint8_t *frame, int index)
     return true;
 }
 
+void free_swap(int index)
+{
+    bitmap_set(swap_table, index, false);
+}

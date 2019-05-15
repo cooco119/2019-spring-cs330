@@ -28,8 +28,6 @@ frame_init (void)
 struct frame_table_entry*
 allocate_frame (enum palloc_flags flags, void *upage)
 {
-    struct frame_table_entry *f;
-    struct list_elem *e;
     uint32_t *addr;
 
     addr = palloc_get_page (PAL_USER | flags);

@@ -81,6 +81,7 @@ find_page(struct list supt, void *addr)
     // addr = pg_round_down(addr);
     // printf("finding page in %p\n", addr);
 
+    if (list_empty(&supt)) return NULL;
     for(e = list_front(&supt); e != list_end(&supt); e = list_next(e))
     {
         page = list_entry(e, struct sup_page_table_entry, elem);
@@ -106,6 +107,7 @@ load_page(void *addr, uint32_t *pd)
     {
         struct frame_table_entry *frame = allocate_frame(PAL_USER, addr);
         frame->spte = page;
+        page->frame = frame->frame;
         if (frame == NULL){
             printf("frame alloc failed\n");
             return false;
@@ -114,7 +116,6 @@ load_page(void *addr, uint32_t *pd)
         switch (page->loc)
         {
         case ON_FRAME:
-            page->frame = frame->frame;
             break;
         
         case ON_SWAP:
@@ -184,7 +185,7 @@ free_page (struct list *supt, void *addr)
     if (!list_empty(supt))
     {
         lock_acquire(&thread_current()->supt_lock);
-        for (e = list_front(supt); e != list_back(supt); e = list_next(supt))
+        for (e = list_front(supt); e != list_back(supt); e = list_next(e))
         {
             page = list_entry(e, struct sup_page_table_entry, elem);
             if (page->user_vaddr == addr)
@@ -266,3 +267,41 @@ install_from_file (struct list *supt, void *uaddr, struct file *file, off_t ofs,
     return true;
 }
 
+bool
+page_unmap(struct list supt, uint32_t *pd, void* addr, struct file *f, off_t ofs)
+{
+    file_seek(f, ofs);
+    struct sup_page_table_entry *page = find_page(supt, addr);
+    if (page == NULL)
+    {
+        PANIC("unmap failed");
+    }
+    bool dirty;
+    switch (page->loc)
+    {
+        case ON_FRAME:
+            dirty = false;
+            dirty = dirty || pagedir_is_dirty(pd, page->user_vaddr);
+            dirty = dirty || pagedir_is_dirty(pd, page->frame);
+            if (dirty)
+            {
+                file_write_at(f, page->user_vaddr, PGSIZE, ofs);
+            }
+            free_frame(page->frame);
+            pagedir_clear_page(pd, page->user_vaddr);
+            break;
+        case ON_SWAP:
+            free_swap(page->swap_index);
+            break;
+        case ON_FILE:
+            break;
+        default:
+            break;
+    }
+
+    lock_acquire(&thread_current()->supt_lock);
+    list_remove(&page->elem);
+    lock_release(&thread_current()->supt_lock);
+
+    return true;
+}

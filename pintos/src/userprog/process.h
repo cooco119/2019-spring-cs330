@@ -8,4 +8,12 @@ int process_wait (tid_t);
 void process_exit (void);
 void process_activate (void);
 
+struct mmapd {
+    int id;
+    struct list_elem elem;
+    struct file* file;
+    void *addr;
+    size_t size;
+};
+
 #endif /* userprog/process.h */
