@@ -131,7 +131,6 @@ page_fault (struct intr_frame *f)
   bool write;        /* True: access was write, false: access was read. */
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
-  void *fault_page = pg_round_down(fault_addr);
   bool success = false;
 
   struct thread *curr = thread_current();
@@ -157,7 +156,10 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  if (! load_page(fault_addr, curr->pagedir))
+  void *fault_page = pg_round_down(fault_addr);
+  // printf("fault page : %p\n", fault_page);
+
+  if (! load_page(fault_page, curr->pagedir))
   {
     printf("Page fault at %p: loading page falied\n", fault_addr);
     kill (f);
@@ -168,24 +170,28 @@ page_fault (struct intr_frame *f)
 
   if (f->esp <= fault_addr && PHYS_BASE - MAX_STACK_SIZE <= fault_addr && fault_addr < PHYS_BASE)
   {
-    if (find_page(fault_page) == NULL)
+    if (find_page(thread_current()->supt, fault_page) == NULL)
       success = success & grow_stack(curr->supt, fault_page);
   }
 
   if (success){
+    // printf("Successfully handled page fault\n");
     return;
   }
-
+  
   if (!user) {
-   //   printf("falut addr: %p\n", fault_addr);
+    printf("not user\n");
      exit(-1); 
   }
   if (is_kernel_vaddr(fault_addr)){
+    printf("kernel addr\n");
     exit(-1);
   }
   if (not_present) {
+    printf("not present\n");
     exit(-1);
   }
+
 
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to

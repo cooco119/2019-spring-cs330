@@ -9,6 +9,7 @@
 
 static struct lock frame_lock;
 static struct list frame_table;
+static int page_num = 0;
 
 /*
  * Initialize frame table
@@ -27,7 +28,11 @@ frame_init (void)
 struct frame_table_entry*
 allocate_frame (enum palloc_flags flags, void *upage)
 {
-    uint8_t *addr = palloc_get_page (PAL_USER | flags);
+    struct frame_table_entry *f;
+    struct list_elem *e;
+    uint32_t *addr;
+
+    addr = palloc_get_page (PAL_USER | flags);
     if (addr == NULL){
         swap_out();
         addr = palloc_get_page(PAL_USER | flags);
@@ -41,7 +46,8 @@ allocate_frame (enum palloc_flags flags, void *upage)
     frame->frame = addr;
     frame->uaddr = upage;
     frame->owner = thread_current();
-    frame->spte = NULL;
+    frame->spte = "NULL";
+    frame->hold = true;
 
     lock_acquire(&frame_lock);
     list_push_back(&frame_table, &frame->elem);
@@ -59,8 +65,12 @@ select_frame_to_evict(void)
 
     for (e = list_begin(&frame_table); e != list_end(&frame_table); e = list_next(e))
     {
+        frame = list_entry(e, struct frame_table_entry, elem);
+        // if (frame->hold) continue;
+        // printf("iterating frame of uaddr : %p\n", frame->uaddr);
         if (! pagedir_is_accessed(curr->pagedir, frame->uaddr))
         {
+            // printf("evicting frame of uaddr : %p\n", frame->uaddr);
             return frame;
         }
         pagedir_set_accessed(curr->pagedir, frame->uaddr, false);
@@ -68,12 +78,25 @@ select_frame_to_evict(void)
 
     for (e = list_begin(&frame_table); e != list_end(&frame_table); e = list_next(e))
     {
+        frame = list_entry(e, struct frame_table_entry, elem);
+        // if (frame->hold) continue;
         if (! pagedir_is_accessed(curr->pagedir, frame->uaddr))
         {
+            // printf("evicting frame of uaddr : %p\n", frame->uaddr);
             return frame;
         }
         pagedir_set_accessed(curr->pagedir, frame->uaddr, false);
     }
+
+    // static unsigned tmp = 1;
+    // tmp = tmp * 1928471u + 1029381723u;
+    // size_t pointer = tmp % list_size(&frame_table);
+    // int i = 0; e = list_begin(&frame_table);
+    // for (i = 0; i < pointer; i++)
+    // {
+    //     e = list_next(e);
+    // }
+    // return frame = list_entry(e, struct frame_table_entry, elem);
 
     return NULL;
 }
@@ -82,6 +105,7 @@ select_frame_to_evict(void)
 bool
 free_frame (void *addr)
 {
+    // printf("freeing frame\n");
     struct frame_table_entry *frame;
     struct list_elem *e;
 
@@ -92,6 +116,7 @@ free_frame (void *addr)
         if (frame->frame == addr){
             list_remove(&frame->elem);
             free(frame);
+            break;
         }
     }
     lock_release(&frame_lock);
@@ -104,8 +129,14 @@ frame_install_page (struct frame_table_entry *frame, void *addr)
     struct sup_page_table_entry *page = allocate_page(addr);
     if (page == NULL)
         return false;
-    // printf("installed spte in %p\n", addr);
+    // printf("installed spte in %p. total installed pages: %d\n", addr, ++page_num);
+    // if (page_num >= 517)
+    // {
+    //     printf("for debug\n");
+    // }
+    // printf("alloc page in %p\n", addr);
     frame->spte = page;
+    frame->hold = false;
 
     return true;
 }

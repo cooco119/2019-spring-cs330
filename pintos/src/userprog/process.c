@@ -404,7 +404,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
+  // file_close (file);
   return success;
 }
 
@@ -480,6 +480,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT (ofs % PGSIZE == 0);
 
   file_seek (file, ofs);
+  struct thread *curr = thread_current();
   while (read_bytes > 0 || zero_bytes > 0) 
     {
       /* Do calculate how to fill this page.
@@ -488,36 +489,44 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-      /* Get a page of memory. */
-      struct frame_table_entry *frame = allocate_frame(PAL_USER, upage);
-      if (frame == NULL)
-        return false;
-      uint8_t *kpage = frame->frame;
-
-      /* Load this page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
-        {
-          free_frame (kpage);
-          return false; 
-        }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
-
-      /* Add the page to the process's address space. */
-      if (!install_page (upage, kpage, writable)) 
-        {
-          free_frame (kpage);
-          return false; 
-        }
-      
-      if (!frame_install_page(frame, upage))
+      if (! install_from_file(&curr->supt, upage, file, ofs, page_read_bytes, page_zero_bytes, writable))
       {
-        free_frame (kpage);
         return false;
       }
+
+      // /* Get a page of memory. */
+      // struct frame_table_entry *frame = allocate_frame(PAL_USER, upage);
+      // if (frame == NULL)
+      //   return false;
+      // uint8_t *kpage = frame->frame;
+
+      // /* Load this page. */
+      // if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
+      //   {
+      //     free_frame (kpage);
+      //     return false; 
+      //   }
+      // memset (kpage + page_read_bytes, 0, page_zero_bytes);
+
+      // /* Add the page to the process's address space. */
+      // if (!install_page (upage, kpage, writable)) 
+      //   {
+      //     free_frame (kpage);
+      //     return false; 
+      //   }
+      
+      // if (!frame_install_page(frame, upage))
+      // {
+      //   printf("frame install failed\n");
+      //   free_frame (kpage);
+      //   return false;
+      // }
+      
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
+      ofs += PGSIZE;
     }
   return true;
 }
@@ -536,6 +545,7 @@ setup_stack (void **esp)
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
+      success = success & frame_install_page(frame, ((uint8_t *) PHYS_BASE) - PGSIZE);
       if (success){
         *esp = PHYS_BASE;
  

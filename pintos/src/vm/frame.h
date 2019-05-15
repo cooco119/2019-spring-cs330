@@ -11,6 +11,7 @@ struct frame_table_entry
 	struct thread* owner;
 	struct sup_page_table_entry* spte;
 	struct list_elem elem;
+	bool hold;
 };
 
 void frame_init (void);

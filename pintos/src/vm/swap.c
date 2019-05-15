@@ -11,6 +11,8 @@
 
 static const size_t SECTOR_PER_PAGE = PGSIZE / DISK_SECTOR_SIZE;
 static size_t swap_size;
+static int swap_num = 0;
+static int swap_in_num = 0;
 
 /* The swap device */
 static struct disk *swap_device;
@@ -46,24 +48,28 @@ swap_init (void)
  * of the disk into the frame. 
  */ 
 bool 
-swap_in (void *addr)
+swap_in (void *addr, struct sup_page_table_entry *page)
 {
+    // printf("trying swap in %d times.\n", ++swap_in_num);
     bool success = false;
     lock_acquire(&swap_lock);
-    struct sup_page_table_entry *page = find_page(addr);
+    // struct sup_page_table_entry *page = find_page(thread_current()->supt, addr);
+    ASSERT(page != NULL);
     if (page->loc != ON_SWAP)
     {
         lock_release(&swap_lock);
+        printf("Not swapped\n");
         return false;
     }
-
-    struct frame_table_entry *frame = allocate_frame(PAL_USER, addr);
-    success = read_from_disk(frame->frame, page->swap_index);
-    success = success & frame_install_page(frame, addr);
+    // struct frame_table_entry *frame = allocate_frame(PAL_USER, addr);
+    success = read_from_disk(addr, page->swap_index);
+    // success = success & frame_install_page(frame, addr);
+    bitmap_set(swap_table, page->swap_index, false);
     lock_release(&swap_lock);
     page->swap_index = -1;
     page->loc = ON_FRAME;
 
+    // printf("swap in %s\n", success ? "success" : "failed");
     return success;
 }
 
@@ -84,20 +90,34 @@ swap_in (void *addr)
 bool
 swap_out (void)
 {
+    // printf("trying swap out for %d times.\n", ++swap_num);
+    // ++swap_num;
+    // if (swap_num >= 517)
+    // {
+    //     printf("debug point\n");
+    // }
     bool success = false;
     struct thread *curr = thread_current();
     struct frame_table_entry *frame;
 
     frame = select_frame_to_evict();
+    ASSERT(frame != NULL);
 
-    struct sup_page_table_entry *page = frame->spte;
-    pagedir_clear_page(curr->pagedir, frame->frame);
-    free_frame(frame->frame);
-    page->loc = ON_SWAP;
+    pagedir_clear_page(frame->owner->pagedir, frame->uaddr);
 
     size_t swap_index = bitmap_scan_and_flip(swap_table, 0, 1, false);
     success = write_to_disk(frame->frame, swap_index);
+    struct sup_page_table_entry *page = find_page(frame->owner->supt, frame->uaddr);
+    if (page == NULL)
+    {
+        printf("page null, frame uaddr: %p\n", frame->uaddr);
+    }
+    page->loc = ON_SWAP;
     page->swap_index = swap_index;
+    // printf("swapped out to index of %d\n", swap_index);
+    free_frame(frame->frame);
+
+    // printf("swap out %s\n", success ? "success" : "failed");
 
     return success;
 }
@@ -111,6 +131,7 @@ bool read_from_disk (uint8_t *frame, int index)
     size_t i;
     for (i = 0; i < SECTOR_PER_PAGE; i++)
     {
+        // printf("reading %p into %p\n", index * SECTOR_PER_PAGE + i, frame + (DISK_SECTOR_SIZE * i));
         disk_read(swap_device, index * SECTOR_PER_PAGE + i, frame + (DISK_SECTOR_SIZE * i));
     }
     return true;

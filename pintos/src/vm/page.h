@@ -6,12 +6,15 @@
 #include <hash.h>
 #include <debug.h>
 #include "vm/frame.h"
+#include "filesys/file.h"
+#include "filesys/filesys.h"
 
 enum page_location
 {
 	ON_FRAME,
 	ON_SWAP,
-	NONE
+	NONE,
+	ON_FILE
 };
 
 enum page_state
@@ -34,15 +37,20 @@ struct sup_page_table_entry
 	int swap_index;
 
 	struct list_elem elem;
+	struct file *file;
+	off_t ofs;
+	uint32_t read_bytes;
+	uint32_t zero_bytes;
+	bool writable;
 };
 
 struct list *page_init (void);
 struct sup_page_table_entry *allocate_page (void *addr);
-struct sup_page_table_entry* find_page(void *addr);
+struct sup_page_table_entry* find_page(struct list supt, void *addr);
 bool load_page(void *addr, uint32_t *pd);
 void free_page(struct list *supt, void *addr);
 void free_page_table (void);
 bool grow_stack(struct list supt, void *page);
-
+bool install_from_file (struct list *supt, void *uaddr, struct file *file, off_t ofs, uint32_t read_bytes, uint32_t zero_bytes, bool writable);
 
 #endif /* vm/page.h */

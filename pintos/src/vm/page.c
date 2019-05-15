@@ -29,6 +29,10 @@ struct sup_page_table_entry *
 allocate_page (void *addr)
 {
     struct sup_page_table_entry *page = (struct sup_page_table_entry *) malloc(sizeof(struct sup_page_table_entry));
+    if (page == NULL){
+        printf("page allocation failed\n");
+        return NULL;
+    }
     struct thread *curr = thread_current();
 
     page->user_vaddr = addr;
@@ -59,29 +63,34 @@ allocate_page (void *addr)
 }
 
 struct sup_page_table_entry *
-find_page(void *addr)
+find_page(struct list supt, void *addr)
 {
-    struct thread *curr = thread_current();
     struct sup_page_table_entry *page;
     struct list_elem *e;
-    addr = pg_round_down(addr);
+    // addr = pg_round_down(addr);
     // printf("finding page in %p\n", addr);
 
-    for(e = list_front(&curr->supt); e != list_back(&curr->supt); e = list_next(e))
+    for(e = list_front(&supt); e != list_end(&supt); e = list_next(e))
     {
         page = list_entry(e, struct sup_page_table_entry, elem);
+        // if (addr > 0x8240000)
+        // {
+        //     printf("page addr : %p, uaddr: %p\n", page->user_vaddr, addr);
+        // }
         if (page->user_vaddr == addr)
         {
             return page;
         }
     }
+    printf("page not found : %p, user addr? : %s\n", addr, is_user_vaddr(addr) ? "true": "false");
     return NULL;
 }
 
 bool
 load_page(void *addr, uint32_t *pd)
 {
-    struct sup_page_table_entry *page = find_page(addr);
+    bool writable = true;
+    struct sup_page_table_entry *page = find_page(thread_current()->supt, addr);
     if (page != NULL)
     {
         struct frame_table_entry *frame = allocate_frame(PAL_USER, addr);
@@ -98,17 +107,38 @@ load_page(void *addr, uint32_t *pd)
             break;
         
         case ON_SWAP:
-            swap_in(addr);
+            // printf("useraddr : %p, kernel addr: %p\n", addr, frame->frame);
+            swap_in(frame->frame, page);
             break;
         
         case NONE:
+            memset (frame->frame, 0, PGSIZE);
+            break;
+
+        case ON_FILE:
+            file_seek(page->file, page->ofs);
+            uint32_t read = file_read(page->file, frame->frame, page->read_bytes);
+            if (read != page->read_bytes)
+            {
+                free_frame(frame->frame);
+                return false;
+            }
+            memset (frame->frame + read, 0, page->zero_bytes);
+            writable = page->writable;
+
+            // if (!frame_install_page(frame, upage))
+      // {
+      //   printf("frame install failed\n");
+      //   free_frame (kpage);
+      //   return false;
+      // }
             break;
 
         default:
             break;
         }
 
-        if (!pagedir_set_page(pd, addr, frame, true))
+        if (!pagedir_set_page(pd, addr, frame->frame, writable))
         {
             free_frame(frame->frame);
             printf("pagedir setting fail\n");
@@ -118,7 +148,9 @@ load_page(void *addr, uint32_t *pd)
         page->loc = ON_FRAME;
         page->active = true;
         pagedir_set_dirty(pd, frame->frame, false);
+        page->access_time = timer_ticks();
 
+        // printf("loading page success\n");
         return true;
     }
     else{
@@ -130,6 +162,7 @@ load_page(void *addr, uint32_t *pd)
 void
 free_page (struct list *supt, void *addr)
 {
+    // printf("freeing page\n");
     struct sup_page_table_entry *page;
     struct list_elem *e;
 
@@ -195,5 +228,26 @@ grow_stack(struct list supt, void *page)
     lock_release(&thread_current()->supt_lock);
 
     return success;
+}
+
+bool
+install_from_file (struct list *supt, void *uaddr, struct file *file, off_t ofs, uint32_t read_bytes, uint32_t zero_bytes, bool writable)
+{
+    struct sup_page_table_entry *page = (struct sup_page_table_entry *) malloc (sizeof (struct sup_page_table_entry));
+
+    page->user_vaddr = uaddr;
+    page->loc = ON_FILE;
+    page->file = file;
+    page->ofs = ofs;
+    page->read_bytes = read_bytes;
+    page->zero_bytes = zero_bytes;
+    page->writable = writable;
+
+    lock_acquire(&thread_current()->supt_lock);
+    list_push_back(supt, &page->elem);
+    lock_release(&thread_current()->supt_lock);
+
+    // printf("installed from file, uaddr: %p\n", uaddr);
+    return true;
 }
 
