@@ -297,22 +297,28 @@ evict_sector (disk_sector_t idx)
 disk_sector_t
 pick_entry_to_evict ()
 {
-  // TODO: select using clock algorithm
-
   // Temporarily select random one
   int len = list_size (&buffer_cache);
   int random = timer_ticks() % len;
 
   struct list_elem *e;
   struct buffer_cache_entry *c;
-  int i = 0;
   for (e = list_begin (&buffer_cache); e != list_end (&buffer_cache); e = list_next(e))
   {
-    if (i == random)
+    if (! c->accessed)
     {
-      c = list_entry(e, struct buffer_cache_entry, elem);
       return c->idx;
     }
+    c->accessed = false;
+  }
+  
+  for (e = list_begin (&buffer_cache); e != list_end (&buffer_cache); e = list_next(e))
+  {
+    if (! c->accessed)
+    {
+      return c->idx;
+    }
+    c->accessed = false;
   }
 }
 
