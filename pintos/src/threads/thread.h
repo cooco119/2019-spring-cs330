@@ -98,6 +98,7 @@ struct thread
     struct file *files[128];
     struct semaphore load_lock;
     struct thread *parent;
+    int64_t block_end_tick;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */

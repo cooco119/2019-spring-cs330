@@ -7,6 +7,7 @@
 #include "threads/io.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "filesys/inode.h"
   
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -29,6 +30,7 @@ static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 
+static struct list block_list;
 /* Sets up the 8254 Programmable Interval Timer (PIT) to
    interrupt PIT_FREQ times per second, and registers the
    corresponding interrupt. */
@@ -44,6 +46,7 @@ timer_init (void)
   outb (0x40, count >> 8);
 
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+  list_init (&block_list);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -98,9 +101,16 @@ timer_sleep (int64_t ticks)
 {
   int64_t start = timer_ticks ();
 
+  enum intr_level old_level;
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+  // while (timer_elapsed (start) < ticks) 
+  //   thread_yield ();
+  struct thread *t = thread_current();
+  t->block_end_tick = start + ticks;
+  list_push_back(&block_list, &t->elem);
+  old_level = intr_disable();
+  thread_block();
+  intr_set_level (old_level);
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -136,6 +146,24 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
+  struct thread *t;
+
+  struct list_elem *e;
+
+  if (! list_empty(&block_list)){
+    for (e = list_head(&block_list); e != list_end(&block_list); ){
+      t = list_entry (e, struct thread, elem);
+      // Check if blocked and sleep time passed.
+      if (t->block_end_tick <= ticks){
+        e = list_remove(e);
+        thread_unblock(t);
+      }
+      else{
+        e = e->next;
+      }
+    }
+  }
+  write_dirty_inodes ();
   thread_tick ();
 }
 

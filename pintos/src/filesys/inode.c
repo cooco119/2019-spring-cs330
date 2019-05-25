@@ -268,8 +268,9 @@ evict_sector (disk_sector_t idx)
     if (c->idx == idx)
     {
       list_remove (e);
+      disk_write (filesys_disk, c->idx, c->data);
       free (c);
-
+      buffer_cache_cnt--;
       lock_release (&buffer_lock);
       return true;
     }
@@ -300,6 +301,46 @@ pick_entry_to_evict ()
       return c->idx;
     }
   }
+}
+
+/* Write all dirty-bit masked inodes. */
+void 
+write_dirty_inodes ()
+{
+  struct list_elem *e;
+  struct buffer_cache_entry *c;
+  lock_acquire (&buffer_lock);
+  for (e = list_begin (&buffer_cache); e != list_end (&buffer_cache); e = list_next(e))
+  {
+    c = list_entry (e, struct buffer_cache_entry, elem);
+    if (c->dirty)
+    {
+      disk_write (filesys_disk, c->idx, c->data);
+      c->dirty = false;
+    }
+  }
+  lock_release (&buffer_lock);
+}
+
+/* Free buffer cache. */
+void
+free_buffer_cache ()
+{
+  struct list_elem *e;
+  struct buffer_cache_entry *c;
+
+  lock_acquire (&buffer_lock);
+  for (e = list_begin (&buffer_cache); e != list_end (&buffer_cache); e = list_next (e))
+  {
+    c = list_entry (e, struct buffer_cache_entry, elem);
+    list_remove (e);
+    if (c->dirty)
+    {
+      disk_write (filesys_disk, c->idx, c->data);
+    }
+    free (c);
+  }
+  free (&buffer_cache);
 }
 
 /* Fetch SIZE bytes from cache into BUFFER from OFFSET.
@@ -338,6 +379,7 @@ commit_cache (disk_sector_t idx, void *buffer_, off_t size, off_t offset)
   
   if (cache_entry != NULL)
   {
+    cache_entry->dirty = true;
     memcpy (cache_entry->data + offset, buffer, size);
     return true;
   }
