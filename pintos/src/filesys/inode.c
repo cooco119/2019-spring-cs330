@@ -242,7 +242,7 @@ fetch_sector (disk_sector_t idx)
   if (buffer_cache_cnt < BUFFER_CACHE_SIZE)
   {
     c->idx = idx;
-    c->accessed = false;
+    c->accessed = true;
     c->dirty = false;
     disk_read(filesys_disk, idx, c->data);
     list_push_back(&buffer_cache, &c->elem);
@@ -372,6 +372,7 @@ fetch_cache (disk_sector_t idx, void *buffer_, off_t size, off_t offset)
 
   if (cache_entry != NULL)
   {
+    cache_entry->accessed = true;
     memcpy(buffer, cache_entry->data + offset, size);
     return true;
   }
@@ -399,6 +400,7 @@ commit_cache (disk_sector_t idx, void *buffer_, off_t size, off_t offset)
   if (cache_entry != NULL)
   {
     cache_entry->dirty = true;
+    cache_entry->accessed = true;
     memcpy (cache_entry->data + offset, buffer, size);
     return true;
   }
