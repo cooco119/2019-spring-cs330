@@ -107,7 +107,8 @@ timer_sleep (int64_t ticks)
   //   thread_yield ();
   struct thread *t = thread_current();
   t->block_end_tick = start + ticks;
-  list_push_back(&block_list, &t->elem);
+  // list_push_back(&block_list, &t->elem);
+  list_insert_ordered(&block_list, &t->elem, &compare_priority, NULL);
   old_level = intr_disable();
   thread_block();
   intr_set_level (old_level);
@@ -147,11 +148,21 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   struct thread *t;
-
+  struct thread *before;
+  int low_priority_add_tick = 10;
+  int i = 0;
   struct list_elem *e;
-
+  enum intr_level old_level;
+  old_level = intr_disable();
+  
   if (! list_empty(&block_list)){
-    for (e = list_head(&block_list); e != list_end(&block_list); ){
+    for (e = list_begin(&block_list)->next; e != list_end(&block_list); e = e->next){
+      t = list_entry (e, struct thread, elem);
+      before = list_entry (e->prev, struct thread, elem);
+      if (before->priority > t->priority)
+        t->block_end_tick = before->block_end_tick + 10;
+    }
+    for (e = list_begin(&block_list); e != list_end(&block_list); ){
       t = list_entry (e, struct thread, elem);
       // Check if blocked and sleep time passed.
       if (t->block_end_tick <= ticks){
@@ -163,6 +174,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
       }
     }
   }
+  intr_set_level(old_level);
   write_dirty_inodes ();
   thread_tick ();
 }

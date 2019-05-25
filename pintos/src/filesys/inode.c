@@ -8,6 +8,7 @@
 #include "threads/malloc.h"
 #include "threads/synch.h"
 #include "devices/timer.h"
+#include "threads/thread.h"
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
@@ -234,6 +235,10 @@ bool
 fetch_sector (disk_sector_t idx)
 {
   struct buffer_cache_entry *c = (struct buffer_cache_entry*) malloc(sizeof(struct buffer_cache_entry));
+
+  if (check_cache(idx) != NULL)
+    return false;
+
   if (buffer_cache_cnt < BUFFER_CACHE_SIZE)
   {
     c->idx = idx;
@@ -252,6 +257,14 @@ fetch_sector (disk_sector_t idx)
     else
       return false;
   }
+}
+
+/* Thread function for fetching sector in background. */
+bool
+fetch_sector_background (disk_sector_t idx)
+{
+  thread_yield();
+  return fetch_sector (idx);
 }
 
 /* Evicts sector from buffer_cache_list */
@@ -406,6 +419,8 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
   off_t bytes_read = 0;
   uint8_t *bounce = NULL;
 
+  disk_sector_t last_sector_used;
+
   while (size > 0) 
     {
       /* Disk sector to read, starting byte offset within sector. */
@@ -448,8 +463,11 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
       size -= chunk_size;
       offset += chunk_size;
       bytes_read += chunk_size;
+      last_sector_used = sector_idx;
     }
   // free (bounce);
+
+  thread_create ("read_ahead", thread_current()->priority - 1, fetch_sector_background, last_sector_used);
 
   return bytes_read;
 }
@@ -466,6 +484,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
   const uint8_t *buffer = buffer_;
   off_t bytes_written = 0;
   uint8_t *bounce = NULL;
+  disk_sector_t last_sector_used;
 
   if (inode->deny_write_cnt)
     return 0;
@@ -519,8 +538,10 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       size -= chunk_size;
       offset += chunk_size;
       bytes_written += chunk_size;
+      last_sector_used = sector_idx;
     }
   // free (bounce);
+  thread_create ("read_ahead", thread_current()->priority - 1, fetch_sector_background, last_sector_used);
 
   return bytes_written;
 }
