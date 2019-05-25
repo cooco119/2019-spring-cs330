@@ -27,6 +27,7 @@ void inode_remove (struct inode *);
 struct buffer_cache_entry * check_cache (disk_sector_t idx);
 bool fetch_sector (disk_sector_t idx);
 bool evict_sector (disk_sector_t idx);
+disk_sector_t pick_entry_to_evict ();
 bool fetch_cache (disk_sector_t idx, void *buffer_, off_t size, off_t offset);
 off_t inode_read_at (struct inode *, void *, off_t size, off_t offset);
 off_t inode_write_at (struct inode *, const void *, off_t size, off_t offset);

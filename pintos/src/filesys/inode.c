@@ -6,6 +6,8 @@
 #include "filesys/filesys.h"
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
+#include "threads/synch.h"
+#include "devices/timer.h"
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
@@ -60,6 +62,8 @@ static struct list open_inodes;
 
 static struct list buffer_cache;
 
+static struct lock buffer_lock;
+
 static int buffer_cache_cnt = 0;
 
 /* Initializes the inode module. */
@@ -68,6 +72,7 @@ inode_init (void)
 {
   list_init (&open_inodes);
   list_init (&buffer_cache);
+  lock_init (&buffer_lock);
 }
 
 /* Initializes an inode with LENGTH bytes of data and
@@ -208,15 +213,18 @@ check_cache (disk_sector_t idx)
   struct list_elem *e;
   struct buffer_cache_entry *c;
 
+  lock_acquire (&buffer_lock);
   for (e = list_begin(&buffer_cache); e != list_end(&buffer_cache); e = list_next(e))
   {
     c = list_entry(e, struct buffer_cache_entry, elem);
     if (c->idx == idx)
     {
+      lock_release (&buffer_lock);
       return c;
     }
   }
 
+  lock_release (&buffer_lock);
   return NULL;
 }
 
@@ -239,10 +247,10 @@ fetch_sector (disk_sector_t idx)
   }
   else
   {
-    // TODO: select which sector to evict
-    
-    evict_sector (1); 
-    return fetch_sector (idx);
+    if (evict_sector (pick_entry_to_evict())) 
+      return fetch_sector (idx);
+    else
+      return false;
   }
 }
 
@@ -250,7 +258,48 @@ fetch_sector (disk_sector_t idx)
 bool
 evict_sector (disk_sector_t idx)
 {
+  struct list_elem *e;
+  struct buffer_cache_entry *c;
 
+  lock_acquire (&buffer_lock);
+  for (e = list_begin(&buffer_cache); e != list_end(&buffer_cache); e = list_next(&buffer_cache))
+  {
+    c = list_entry(e, struct buffer_cache_entry, elem);
+    if (c->idx == idx)
+    {
+      list_remove (e);
+      free (c);
+
+      lock_release (&buffer_lock);
+      return true;
+    }
+  }
+
+  lock_release (&buffer_lock);
+  return false;
+}
+
+/* Select which sector to evict from buffer cache. */
+disk_sector_t
+pick_entry_to_evict ()
+{
+  // TODO: select using clock algorithm
+
+  // Temporarily select random one
+  int len = list_size (&buffer_cache);
+  int random = timer_ticks() % len;
+
+  struct list_elem *e;
+  struct buffer_cache_entry *c;
+  int i = 0;
+  for (e = list_begin (&buffer_cache); e != list_end (&buffer_cache); e = list_next(e))
+  {
+    if (i == random)
+    {
+      c = list_entry(e, struct buffer_cache_entry, elem);
+      return c->idx;
+    }
+  }
 }
 
 /* Fetch SIZE bytes from cache into BUFFER from OFFSET.
