@@ -9,6 +9,7 @@
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
+#define BUFFER_CACHE_SIZE 64
 
 /* On-disk inode.
    Must be exactly DISK_SECTOR_SIZE bytes long. */
@@ -57,11 +58,16 @@ byte_to_sector (const struct inode *inode, off_t pos)
    returns the same `struct inode'. */
 static struct list open_inodes;
 
+static struct list buffer_cache;
+
+static int buffer_cache_cnt = 0;
+
 /* Initializes the inode module. */
 void
 inode_init (void) 
 {
   list_init (&open_inodes);
+  list_init (&buffer_cache);
 }
 
 /* Initializes an inode with LENGTH bytes of data and
@@ -194,6 +200,86 @@ inode_remove (struct inode *inode)
   inode->removed = true;
 }
 
+/* Find target SECTOR_IDX in buffer cache. If doesn't exists, 
+   returns NULL. */
+struct buffer_cache_entry *
+check_cache (disk_sector_t idx)
+{
+  struct list_elem *e;
+  struct buffer_cache_entry *c;
+
+  for (e = list_begin(&buffer_cache); e != list_end(&buffer_cache); e = list_next(e))
+  {
+    c = list_entry(e, struct buffer_cache_entry, elem);
+    if (c->idx == idx)
+    {
+      return c;
+    }
+  }
+
+  return NULL;
+}
+
+/* Fetch data from SECTOR_IDX of sector into buffer_cache_entry and
+   push the entry into the buffer_cache_list. */
+bool
+fetch_sector (disk_sector_t idx)
+{
+  struct buffer_cache_entry *c = (struct buffer_cache_entry*) malloc(sizeof(struct buffer_cache_entry));
+  if (buffer_cache_cnt < BUFFER_CACHE_SIZE)
+  {
+    c->idx = idx;
+    c->accessed = false;
+    c->dirty = false;
+    disk_read(filesys_disk, idx, c->data);
+    list_push_back(&buffer_cache, &c->elem);
+    buffer_cache_cnt++;
+    
+    return true;
+  }
+  else
+  {
+    // TODO: select which sector to evict
+    
+    evict_sector (1); 
+    return fetch_sector (idx);
+  }
+}
+
+/* Evicts sector from buffer_cache_list */
+bool
+evict_sector (disk_sector_t idx)
+{
+
+}
+
+/* Fetch SIZE bytes from cache into BUFFER from OFFSET.
+   Returns the number of bytes acually read. */
+bool
+fetch_cache (disk_sector_t idx, void *buffer_, off_t size, off_t offset)
+{
+  uint8_t *buffer = buffer_;
+  struct buffer_cache_entry* cache_entry = check_cache(idx);
+
+  if (cache_entry != NULL)
+  {
+    memcpy(buffer, cache_entry->data, size);
+    return true;
+  }
+  else
+  {
+    if (fetch_sector (idx))
+    {
+      return fetch_cache (idx, buffer, size, offset);
+    }
+    else 
+    {
+      return false;
+    }
+  }
+}
+
+
 /* Reads SIZE bytes from INODE into BUFFER, starting at position OFFSET.
    Returns the number of bytes actually read, which may be less
    than SIZE if an error occurs or end of file is reached. */
@@ -219,6 +305,8 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
       int chunk_size = size < min_left ? size : min_left;
       if (chunk_size <= 0)
         break;
+
+      fetch_cache(sector_idx, buffer + bytes_read, chunk_size, sector_ofs);
 
       if (sector_ofs == 0 && chunk_size == DISK_SECTOR_SIZE) 
         {
