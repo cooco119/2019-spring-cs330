@@ -64,6 +64,7 @@ static struct list open_inodes;
 static struct list buffer_cache;
 
 static struct lock buffer_lock;
+static struct lock evict_lock;
 
 static int buffer_cache_cnt = 0;
 
@@ -74,6 +75,7 @@ inode_init (void)
   list_init (&open_inodes);
   list_init (&buffer_cache);
   lock_init (&buffer_lock);
+  lock_init (&evict_lock);
 }
 
 /* Initializes an inode with LENGTH bytes of data and
@@ -214,13 +216,13 @@ check_cache (disk_sector_t idx)
   struct list_elem *e;
   struct buffer_cache_entry *c;
 
-  lock_acquire (&buffer_lock);
+  // lock_acquire (&buffer_lock);
   for (e = list_begin(&buffer_cache); e != list_end(&buffer_cache); e = list_next(e))
   {
     c = list_entry(e, struct buffer_cache_entry, elem);
     if (c->idx == idx)
     {
-      lock_release (&buffer_lock);
+      // lock_release (&buffer_lock);
       return c;
     }
   }
@@ -239,6 +241,7 @@ fetch_sector (disk_sector_t idx)
   if (check_cache(idx) != NULL)
     return false;
 
+  lock_acquire (&buffer_lock);
   if (buffer_cache_cnt < BUFFER_CACHE_SIZE)
   {
     c->idx = idx;
@@ -248,6 +251,7 @@ fetch_sector (disk_sector_t idx)
     list_push_back(&buffer_cache, &c->elem);
     buffer_cache_cnt++;
     
+    lock_release (&buffer_lock);
     return true;
   }
   else
@@ -274,7 +278,7 @@ evict_sector (disk_sector_t idx)
   struct list_elem *e;
   struct buffer_cache_entry *c;
 
-  lock_acquire (&buffer_lock);
+  lock_acquire (&evict_lock);
   for (e = list_begin(&buffer_cache); e != list_end(&buffer_cache); e = list_next(&buffer_cache))
   {
     c = list_entry(e, struct buffer_cache_entry, elem);
@@ -284,12 +288,12 @@ evict_sector (disk_sector_t idx)
       disk_write (filesys_disk, c->idx, c->data);
       free (c);
       buffer_cache_cnt--;
-      lock_release (&buffer_lock);
+      lock_release (&evict_lock);
       return true;
     }
   }
 
-  lock_release (&buffer_lock);
+  lock_release (&evict_lock);
   return false;
 }
 
