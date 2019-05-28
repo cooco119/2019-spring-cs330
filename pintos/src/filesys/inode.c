@@ -13,16 +13,28 @@
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
 #define BUFFER_CACHE_SIZE 64
+#define DIRECT_POINTER_REGION DISK_SECTOR_SIZE * 12
+#define INDIRECT_POINTER_REGION DIRECT_POINTER_REGION + (DISK_SECTOR_SIZE * 128)
+#define DOUBLY_INDIRECT_REGION INDIRECT_POINTER_REGION + (DISK_SECTOR_SIZE * 128 * 128)
+#define INDIRECT_BLOCK_SIZE 128
 
 /* On-disk inode.
    Must be exactly DISK_SECTOR_SIZE bytes long. */
 struct inode_disk
   {
-    disk_sector_t start;                /* First data sector. */
+    // disk_sector_t start;                /* First data sector. */
     off_t length;                       /* File size in bytes. */
     unsigned magic;                     /* Magic number. */
-    uint32_t unused[125];               /* Not used. */
+    disk_sector_t direct_pointers[12];
+    disk_sector_t indirect;
+    disk_sector_t doubly_indirect;
+    uint32_t unused[112];               /* Not used. */
   };
+
+struct indirect_block
+{
+  disk_sector_t pointers[128];
+};
 
 /* Returns the number of sectors to allocate for an inode SIZE
    bytes long. */
@@ -51,8 +63,60 @@ static disk_sector_t
 byte_to_sector (const struct inode *inode, off_t pos) 
 {
   ASSERT (inode != NULL);
+  int pointer_pos;
+  disk_sector_t result;
+
   if (pos < inode->data.length)
-    return inode->data.start + pos / DISK_SECTOR_SIZE;
+    // return inode->data.start + pos / DISK_SECTOR_SIZE;
+    {
+      if (pos < DIRECT_POINTER_REGION) 
+      {
+        pointer_pos = pos / DISK_SECTOR_SIZE;
+        return inode->data.direct_pointers[pointer_pos];
+      }
+      else if (pos < INDIRECT_POINTER_REGION)
+      {
+        struct indirect_block *ib = malloc(sizeof(struct indirect_block));
+        if (ib == NULL) 
+          result = -1;
+
+        if (fetch_cache(inode->data.indirect, ib, DISK_SECTOR_SIZE, 0))
+        {
+          pointer_pos = (pos - DIRECT_POINTER_REGION) / DISK_SECTOR_SIZE;
+          result = ib->pointers[pointer_pos];
+        }
+        else
+          result = -1;
+
+        free(ib);
+        return result;
+      }
+      else if (pos < DOUBLY_INDIRECT_REGION) 
+      {
+        struct indirect_block *ib = malloc(sizeof(struct indirect_block));
+        struct indirect_block *double_ib = malloc(sizeof(struct indirect_block));
+        if (ib == NULL || double_ib == NULL) 
+          result = -1;
+
+        if (fetch_cache(inode->data.doubly_indirect, double_ib, DISK_SECTOR_SIZE, 0)) 
+        {
+          pointer_pos = (pos - INDIRECT_POINTER_REGION) / DISK_SECTOR_SIZE / INDIRECT_BLOCK_SIZE;
+          if (fetch_cache(double_ib->pointers[pointer_pos], ib, DISK_SECTOR_SIZE, 0))
+          {
+            pointer_pos = (pos - INDIRECT_POINTER_REGION) / DISK_SECTOR_SIZE - INDIRECT_BLOCK_SIZE * pointer_pos;
+            result = ib->pointers[pointer_pos];
+          }
+          else
+            result = -1;
+        }
+        else
+          result = -1;
+        
+        free(ib);
+        free(double_ib);
+        return result;
+      }
+    }
   else
     return -1;
 }
