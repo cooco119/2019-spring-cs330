@@ -36,6 +36,12 @@ struct indirect_block
   disk_sector_t pointers[128];
 };
 
+struct allocated_blocks_entry
+{
+  disk_sector_t idx;
+  struct list_elem elem;
+};
+
 /* Returns the number of sectors to allocate for an inode SIZE
    bytes long. */
 static inline size_t
@@ -53,6 +59,7 @@ struct inode
     bool removed;                       /* True if deleted, false otherwise. */
     int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
     struct inode_disk data;             /* Inode content. */
+    struct list allocated_blocks;
   };
 
 /* Returns the disk sector that contains byte offset POS within
@@ -65,6 +72,7 @@ byte_to_sector (const struct inode *inode, off_t pos)
   ASSERT (inode != NULL);
   int pointer_pos;
   disk_sector_t result;
+  disk_sector_t target;
 
   if (pos < inode->data.length)
     // return inode->data.start + pos / DISK_SECTOR_SIZE;
@@ -72,7 +80,14 @@ byte_to_sector (const struct inode *inode, off_t pos)
       if (pos < DIRECT_POINTER_REGION) 
       {
         pointer_pos = pos / DISK_SECTOR_SIZE;
-        return inode->data.direct_pointers[pointer_pos];
+        target = inode->data.direct_pointers[pointer_pos];
+        if (target == NULL)
+        {
+          if (!free_map_allocate(1, &inode->data.direct_pointers[pointer_pos]))
+            return -1;
+          target = inode->data.direct_pointers[pointer_pos];
+        }
+        return target;
       }
       else if (pos < INDIRECT_POINTER_REGION)
       {
@@ -80,10 +95,29 @@ byte_to_sector (const struct inode *inode, off_t pos)
         if (ib == NULL) 
           result = -1;
 
+        if (inode->data.indirect == NULL)
+        {
+          if (!free_map_allocate(1, &inode->data.indirect)) 
+          {
+            free(ib);
+            return -1;
+          }
+        }
+
         if (fetch_cache(inode->data.indirect, ib, DISK_SECTOR_SIZE, 0))
         {
           pointer_pos = (pos - DIRECT_POINTER_REGION) / DISK_SECTOR_SIZE;
-          result = ib->pointers[pointer_pos];
+          target = ib->pointers[pointer_pos];
+          if (target == NULL)
+          {
+            if (!free_map_allocate(1, &ib->pointers[pointer_pos])) 
+            {
+              free(ib);
+              return -1;
+            }
+            target = ib->pointers[pointer_pos];
+          }
+          result = target;
         }
         else
           result = -1;
@@ -98,13 +132,43 @@ byte_to_sector (const struct inode *inode, off_t pos)
         if (ib == NULL || double_ib == NULL) 
           result = -1;
 
+        if (inode->data.doubly_indirect == NULL)
+        {
+          if (!free_map_allocate(1, &inode->data.doubly_indirect)) 
+          {
+            free(ib);
+            free(double_ib);
+            return -1;
+          }
+        }
+
         if (fetch_cache(inode->data.doubly_indirect, double_ib, DISK_SECTOR_SIZE, 0)) 
         {
           pointer_pos = (pos - INDIRECT_POINTER_REGION) / DISK_SECTOR_SIZE / INDIRECT_BLOCK_SIZE;
+          if (double_ib->pointers[pointer_pos] == NULL)
+          {
+            if (!free_map_allocate(1, &double_ib->pointers[pointer_pos])) 
+            {
+              free(ib);
+              free(double_ib);
+              return -1;
+            }
+          }
           if (fetch_cache(double_ib->pointers[pointer_pos], ib, DISK_SECTOR_SIZE, 0))
           {
             pointer_pos = (pos - INDIRECT_POINTER_REGION) / DISK_SECTOR_SIZE - INDIRECT_BLOCK_SIZE * pointer_pos;
-            result = ib->pointers[pointer_pos];
+            target = ib->pointers[pointer_pos];
+            if (target == NULL)
+            {
+              if (!free_map_allocate(1, &ib->pointers[pointer_pos]))
+              {
+                free(ib);
+                free(double_ib);
+                return -1;
+              }
+              target = ib->pointers[pointer_pos];
+            }
+            result = target;
           }
           else
             result = -1;
@@ -115,6 +179,7 @@ byte_to_sector (const struct inode *inode, off_t pos)
         free(ib);
         free(double_ib);
         return result;
+
       }
     }
   else
@@ -163,21 +228,27 @@ inode_create (disk_sector_t sector, off_t length)
   if (disk_inode != NULL)
     {
       size_t sectors = bytes_to_sectors (length);
+      int i;
       disk_inode->length = length;
       disk_inode->magic = INODE_MAGIC;
-      if (free_map_allocate (sectors, &disk_inode->start))
-        {
-          disk_write (filesys_disk, sector, disk_inode);
-          if (sectors > 0) 
-            {
-              static char zeros[DISK_SECTOR_SIZE];
-              size_t i;
+      for (i = 0; i < 12; i++)
+        disk_inode->direct_pointers[i] = NULL;
+      disk_inode->doubly_indirect = NULL;
+      disk_inode->indirect = NULL;
+      disk_write (filesys_disk, sector, disk_inode);
+      // if (free_map_allocate (sectors, &disk_inode->start))
+      //   {
+      //     disk_write (filesys_disk, sector, disk_inode);
+      //     if (sectors > 0) 
+      //       {
+      //         static char zeros[DISK_SECTOR_SIZE];
+      //         size_t i;
               
-              for (i = 0; i < sectors; i++) 
-                disk_write (filesys_disk, disk_inode->start + i, zeros); 
-            }
-          success = true; 
-        } 
+      //         for (i = 0; i < sectors; i++) 
+      //           disk_write (filesys_disk, disk_inode->start + i, zeros); 
+      //       }
+      //     success = true; 
+      //   } 
       free (disk_inode);
     }
   return success;
@@ -215,6 +286,7 @@ inode_open (disk_sector_t sector)
   inode->open_cnt = 1;
   inode->deny_write_cnt = 0;
   inode->removed = false;
+  list_init(&inode->allocated_blocks);
   disk_read (filesys_disk, inode->sector, &inode->data);
   return inode;
 }
@@ -255,8 +327,15 @@ inode_close (struct inode *inode)
       if (inode->removed) 
         {
           free_map_release (inode->sector, 1);
-          free_map_release (inode->data.start,
-                            bytes_to_sectors (inode->data.length)); 
+          // free_map_release (inode->data.start,
+          //                   bytes_to_sectors (inode->data.length)); 
+          struct list_elem *e;
+          struct allocated_blocks_entry *b;
+          for (e = list_begin(&inode->allocated_blocks); e != list_end(&inode->allocated_blocks); e = list_next(e))
+          {
+            b = list_entry(e, struct allocated_blocks_entry, elem);
+            free_map_release (b->idx, 1);
+          }
         }
 
       free (inode); 
@@ -343,7 +422,7 @@ evict_sector (disk_sector_t idx)
   struct buffer_cache_entry *c;
 
   lock_acquire (&evict_lock);
-  for (e = list_begin(&buffer_cache); e != list_end(&buffer_cache); e = list_next(&buffer_cache))
+  for (e = list_begin(&buffer_cache); e != list_end(&buffer_cache); e = list_next(e))
   {
     c = list_entry(e, struct buffer_cache_entry, elem);
     if (c->idx == idx)
