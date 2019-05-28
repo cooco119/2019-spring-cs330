@@ -175,7 +175,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
     }
   }
   intr_set_level(old_level);
-  write_dirty_inodes ();
+  // if (ticks % 50 == 0) write_dirty_inodes ();
   thread_tick ();
 }
 

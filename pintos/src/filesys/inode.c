@@ -205,6 +205,7 @@ inode_init (void)
   list_init (&buffer_cache);
   lock_init (&buffer_lock);
   lock_init (&evict_lock);
+  thread_create("write_behind", PRI_DEFAULT, write_dirty_inodes, NULL);
 }
 
 /* Initializes an inode with LENGTH bytes of data and
@@ -235,7 +236,11 @@ inode_create (disk_sector_t sector, off_t length)
         disk_inode->direct_pointers[i] = NULL;
       disk_inode->doubly_indirect = NULL;
       disk_inode->indirect = NULL;
-      disk_write (filesys_disk, sector, disk_inode);
+      if (free_map_allocate(1, &disk_inode->direct_pointers[0]))
+      {
+        disk_write (filesys_disk, sector, disk_inode);
+        success = true;
+      }
       // if (free_map_allocate (sectors, &disk_inode->start))
       //   {
       //     disk_write (filesys_disk, sector, disk_inode);
@@ -370,7 +375,7 @@ check_cache (disk_sector_t idx)
     }
   }
 
-  lock_release (&buffer_lock);
+  // lock_release (&buffer_lock);
   return NULL;
 }
 
@@ -473,6 +478,7 @@ pick_entry_to_evict ()
 void 
 write_dirty_inodes ()
 {
+  timer_sleep(50);
   struct list_elem *e;
   struct buffer_cache_entry *c;
   lock_acquire (&buffer_lock);
@@ -486,6 +492,7 @@ write_dirty_inodes ()
     }
   }
   lock_release (&buffer_lock);
+  write_dirty_inodes();
 }
 
 /* Free buffer cache. */
@@ -622,7 +629,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
     }
   // free (bounce);
 
-  thread_create ("read_ahead", thread_current()->priority - 1, fetch_sector_background, last_sector_used);
+  thread_create ("read_ahead", PRI_DEFAULT, fetch_sector_background, last_sector_used);
 
   return bytes_read;
 }
@@ -696,7 +703,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       last_sector_used = sector_idx;
     }
   // free (bounce);
-  thread_create ("read_ahead", thread_current()->priority - 1, fetch_sector_background, last_sector_used);
+  thread_create ("read_ahead", PRI_DEFAULT, fetch_sector_background, last_sector_used);
 
   return bytes_written;
 }
