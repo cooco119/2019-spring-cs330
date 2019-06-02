@@ -230,21 +230,18 @@ check_cache (disk_sector_t idx)
   struct buffer_cache_entry *c;
   int i = -1;
 
-  // printf("Bitmap status: size %d\n", bitmap_scan(buffer_cache_map, 0, 1, false));
   for (e = list_begin(&buffer_cache); e != list_end(&buffer_cache); e = list_next(e))
   {
     i++;
     c = list_entry(e, struct buffer_cache_entry, elem);
     if (c->empty == true)
     {
-    // printf("passing empty cache %d of mempos %p, elem: %p\n", i, c, c->elem);
       continue;
     }
     if (c->idx == idx)
     {
       return c;
     }
-    // printf("passing used cache %d of idx %d\n", i, c->idx == NULL ? -1 : c->idx);
   }
 
   return NULL;
@@ -259,7 +256,6 @@ pick_entry_to_evict ()
   for (e = list_begin (&buffer_cache); e != list_end (&buffer_cache); e = list_next(e))
   {
     c = list_entry(e, struct buffer_cache_entry, elem);
-    // printf("i: %d, idx: %d, accessed: %s\n", i, c->idx, c->accessed ? "true" : "false");
     if (! c->accessed)
     {
       return c->idx;
@@ -283,9 +279,6 @@ pick_entry_to_evict ()
 bool
 fetch_sector (disk_sector_t idx)
 {
-  // printf("Fetching sector of %d\n", idx);
-  // printf("Buffer count %d\n", buffer_cache_cnt);
-  // struct buffer_cache_entry *c = (struct buffer_cache_entry*) malloc(sizeof(struct buffer_cache_entry));
   int empty_cache_pos;
   struct buffer_cache_entry *c;
   struct list_elem *e;
@@ -294,14 +287,11 @@ fetch_sector (disk_sector_t idx)
   {
     for (e = list_begin(&buffer_cache); i < BUFFER_CACHE_SIZE && e != list_end(&buffer_cache); e = list_next(e))
     {
-      // printf("i: %d, mempos of elem %p, elem->next %p\n", i, e, e->next);
       c = list_entry(e, struct buffer_cache_entry, elem);
       if (c->empty)
       {
-        // printf("Got empty buffer_cache_entry\n");
         break;
       }
-      // printf("iterating...\n");
       i++;
     }
     c->idx = idx;
@@ -309,19 +299,13 @@ fetch_sector (disk_sector_t idx)
     c->dirty = false;
     c->empty = false;
     empty_cache_pos = bitmap_scan_and_flip(buffer_cache_map, i, 1, false);
-    // printf("before reading, check of elem: %p\n", c->elem);
     disk_read(filesys_disk, idx, c->data);
-    // printf("i: %d, Read data into %p, check of elem: %p elem->next: %p\n", i, c->data, c->elem, &c->elem.next);
-    // list_push_back(&buffer_cache, &c->elem);
-    // printf("\t sector %d disk read result\n", idx);
-    // hex_dump(c->data, c->data, DISK_SECTOR_SIZE, 0);
     buffer_cache_cnt++;
     
     return true;
   }
   else
   {
-    // TODO: select which sector to evict
     disk_sector_t target = pick_entry_to_evict ();
     evict_sector (target); 
     return fetch_sector (idx);
@@ -348,7 +332,6 @@ evict_sector (disk_sector_t idx)
       free (c);
       buffer_cache_cnt--;
       lock_release (&evict_lock);
-      // printf("evicting %d\n", idx);
       return true;
     }
     i++;
@@ -366,13 +349,10 @@ fetch_cache (disk_sector_t idx, void *buffer_, off_t size, off_t origin_ofs, off
   uint8_t *buffer = buffer_;
   struct buffer_cache_entry* cache_entry = check_cache(idx);
 
-  // printf("Bitmap status: size %d\n", bitmap_scan(buffer_cache_map, 0, 1, false));
   if (cache_entry != NULL)
   {
     cache_entry->accessed = true;
     memcpy(buffer + target_ofs, cache_entry->data + origin_ofs, size);
-    // printf("copy size %d data of %p into buffer of %p\n", size, cache_entry->data + origin_ofs, buffer);
-    // printf("&&&&&&&& cache range: %p ~ %p\n", cache_entry->data, cache_entry->data + DISK_SECTOR_SIZE);
     return true;
   }
   else
@@ -419,11 +399,8 @@ off_t
 inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) 
 {
   uint8_t *buffer = buffer_;
-  // uint8_t *tmp_buf ;
   off_t bytes_read = 0;
   uint8_t *bounce = NULL;
-
-  // off_t tmp;
 
   while (size > 0) 
     {
@@ -443,61 +420,11 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
 
       fetch_cache(sector_idx, buffer, chunk_size, sector_ofs, bytes_read);
 
-      // if (sector_ofs == 0 && chunk_size == DISK_SECTOR_SIZE) 
-      //   {
-      //     /* Read full sector directly into caller's buffer. */
-      //     // fetch_cache(sector_idx, buffer + bytes_read, chunk_size, sector_ofs);
-      //     tmp_buf = malloc(DISK_SECTOR_SIZE);
-      //     memcpy(tmp_buf, buffer + bytes_read, DISK_SECTOR_SIZE);
-      //     disk_read (filesys_disk, sector_idx, buffer + bytes_read); 
-      //     if (tmp = memcmp(tmp_buf, buffer + bytes_read, DISK_SECTOR_SIZE) != 0)
-      //     {
-      //       printf("val in cache: %x, val in disk %x\n", tmp_buf + tmp, buffer + bytes_read + tmp);
-      //     }
-      //     printf("copy size %d data into buffer of %p\n", chunk_size, buffer + bytes_read);
-      //     free(tmp_buf);
-      //   }
-      // else 
-      //   {
-      //     /* Read sector into bounce buffer, then partially copy
-      //        into caller's buffer. */
-      //     if (bounce == NULL) 
-      //       {
-      //         bounce = malloc (DISK_SECTOR_SIZE);
-      //         if (bounce == NULL)
-      //           break;
-      //       }
-      //     tmp_buf = malloc(DISK_SECTOR_SIZE);
-      //     fetch_cache(sector_idx, tmp_buf, DISK_SECTOR_SIZE, 0, 0);
-      //     // fetch_cache(sector_idx, buffer + bytes_read, chunk_size, sector_ofs);
-      //     disk_read (filesys_disk, sector_idx, bounce);
-      //     printf("!!!!!!!!! bounce range: %p ~ %p\n", bounce, bounce + DISK_SECTOR_SIZE);
-      //     printf("sector idx: %d\n", sector_idx);
-          
-      //       // printf("\n\n<tmp_buf>\n");
-      //       // hex_dump(tmp_buf, tmp_buf, 32, false);
-      //       // printf("\n\n<bounce>\n");
-      //       // hex_dump(bounce, bounce, 32, false);
-      //       // printf("\n\n");
-      //     if (tmp = memcmp(tmp_buf, bounce, DISK_SECTOR_SIZE) != 0)
-      //     {
-      //       // printf("\t\t\tval in buffer: %x, val in bounce: %x\n", *((char*)(tmp_buf + tmp)), *((char*)(bounce + tmp)));
-      //       printf("\n\n<tmp_buf>\n");
-      //       hex_dump(tmp_buf, tmp_buf, 32, false);
-      //       printf("\n\n<bounce>\n");
-      //       hex_dump(bounce, bounce, 32, false);
-      //       printf("\n\n");
-      //     }
-      //     memcpy (buffer + bytes_read, bounce + sector_ofs, chunk_size);
-      //     printf("copy size %d data of %p into buffer of %p\n", chunk_size, bounce + sector_ofs, buffer + bytes_read);
-      //   }
-      
       /* Advance. */
       size -= chunk_size;
       offset += chunk_size;
       bytes_read += chunk_size;
     }
-  // free (bounce);
 
   return bytes_read;
 }
@@ -535,39 +462,12 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
         break;
 
       commit_cache(sector_idx, buffer + bytes_written, chunk_size, sector_ofs);
-      // printf("\t\t\t\t\tWriting in sector %d, size %d\n", sector_idx, chunk_size);
-      // if (sector_ofs == 0 && chunk_size == DISK_SECTOR_SIZE) 
-      //   {
-      //     /* Write full sector directly to disk. */
-      //     disk_write (filesys_disk, sector_idx, buffer + bytes_written); 
-      //   }
-      // else 
-      //   {
-      //     /* We need a bounce buffer. */
-      //     if (bounce == NULL) 
-      //       {
-      //         bounce = malloc (DISK_SECTOR_SIZE);
-      //         if (bounce == NULL)
-      //           break;
-      //       }
-
-      //     /* If the sector contains data before or after the chunk
-      //        we're writing, then we need to read in the sector
-      //        first.  Otherwise we start with a sector of all zeros. */
-      //     if (sector_ofs > 0 || chunk_size < sector_left) 
-      //       disk_read (filesys_disk, sector_idx, bounce);
-      //     else
-      //       memset (bounce, 0, DISK_SECTOR_SIZE);
-      //     memcpy (bounce + sector_ofs, buffer + bytes_written, chunk_size);
-      //     disk_write (filesys_disk, sector_idx, bounce); 
-      //   }
 
       /* Advance. */
       size -= chunk_size;
       offset += chunk_size;
       bytes_written += chunk_size;
     }
-  // free (bounce);
 
   return bytes_written;
 }
