@@ -17,6 +17,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "filesys/inode.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -306,7 +307,9 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   /* Open executable file. */
   // printf("file name: %s\n", file_name);
+  // printf("opening executable\n");
   file = filesys_open (file_name);
+  // printf("opening file in sector %d, first direct_pointer at %d\n", file->inode->sector, file->inode->data.direct_pointers[0]);
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);

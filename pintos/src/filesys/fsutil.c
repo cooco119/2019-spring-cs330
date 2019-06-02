@@ -121,6 +121,7 @@ fsutil_put (char **argv)
     {
       int chunk_size = size > DISK_SECTOR_SIZE ? DISK_SECTOR_SIZE : size;
       disk_read (src, sector++, buffer);
+      // printf("writing %d chunk\n", chunk_size);
       if (file_write (dst, buffer, chunk_size) != chunk_size)
         PANIC ("%s: write failed with %"PROTd" bytes unwritten",
                file_name, size);

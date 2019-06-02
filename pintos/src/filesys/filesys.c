@@ -53,10 +53,15 @@ filesys_create (const char *name, off_t initial_size)
 {
   disk_sector_t inode_sector = 0;
   struct dir *dir = dir_open_root ();
-  bool success = (dir != NULL
-                  && free_map_allocate (1, &inode_sector)
-                  && inode_create (inode_sector, initial_size)
-                  && dir_add (dir, name, inode_sector));
+  bool success = (dir != NULL);
+                // printf("create : dir %s\n", success ? "success" : "failed");
+                success = success  && free_map_allocate (1, &inode_sector);
+                // printf("created inode at %d\n", inode_sector);
+                // printf("create : freemap alloc %s\n", success ? "success" : "failed");
+                success = success  && inode_create (inode_sector, initial_size);
+                // printf("create : inode_create %s\n", success ? "success" : "failed");
+                success = success  && dir_add (dir, name, inode_sector);
+                // printf("create : dir_add %s\n", success ? "success" : "failed");
   if (!success && inode_sector != 0) 
     free_map_release (inode_sector, 1);
   dir_close (dir);
@@ -104,6 +109,6 @@ do_format (void)
   free_map_create ();
   if (!dir_create (ROOT_DIR_SECTOR, 16))
     PANIC ("root directory creation failed");
-  free_map_close ();
+  // free_map_close ();
   printf ("done.\n");
 }
