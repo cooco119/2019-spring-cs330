@@ -79,6 +79,7 @@ byte_to_sector (const struct inode *inode, off_t pos)
   disk_sector_t result;
   disk_sector_t target;
 
+  // printf("pos: %d, length: %d\n", pos, inode->data.length);
   if (pos < inode->data.length)
     // return inode->data.start + pos / DISK_SECTOR_SIZE;
     {
@@ -709,6 +710,11 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
   off_t bytes_read = 0;
   uint8_t *bounce = NULL;
 
+  // printf("length: %d, ofs: %d\n", inode->data.length, offset);
+  // if (offset >= inode->data.length){
+  //   inode->data.length += offset;
+  //   commit_cache(inode->sector, &inode->data, DISK_SECTOR_SIZE, 0);
+  // }
   while (size > 0) 
     {
       /* Disk sector to read, starting byte offset within sector. */
@@ -760,10 +766,16 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
   const uint8_t *buffer = buffer_;
   off_t bytes_written = 0;
   uint8_t *bounce = NULL;
+  int tmp;
 
   if (inode->deny_write_cnt)
     return 0;
 
+  if (inode->data.length <= size + offset){
+    // printf("Increase length\n");
+    inode->data.length = size + offset;
+    commit_cache(inode->sector, &inode->data, DISK_SECTOR_SIZE, 0);
+  }
   while (size > 0) 
     {
       /* Sector to write, starting byte offset within sector. */
@@ -778,12 +790,12 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       int sector_ofs = offset % DISK_SECTOR_SIZE;
 
       /* Bytes left in inode, bytes left in sector, lesser of the two. */
-      off_t inode_left = inode_length (inode) - offset;
+      // off_t inode_left = inode_length (inode) - offset;
       int sector_left = DISK_SECTOR_SIZE - sector_ofs;
-      int min_left = inode_left < sector_left ? inode_left : sector_left;
+      // int min_left = inode_left < sector_left ? inode_left : sector_left;
 
       /* Number of bytes to actually write into this sector. */
-      int chunk_size = size < min_left ? size : min_left;
+      int chunk_size = size < sector_left ? size : sector_left;
       if (chunk_size <= 0)
         break;
 
