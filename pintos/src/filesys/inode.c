@@ -6,8 +6,7 @@
 #include "filesys/filesys.h"
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
-#include "threads/synch.h"
-#include "devices/timer.h"
+#include <bitmap.h>
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
@@ -62,9 +61,9 @@ static struct list open_inodes;
 
 static struct list buffer_cache;
 
-static struct lock buffer_lock;
-
 static int buffer_cache_cnt = 0;
+
+static struct bitmap *buffer_cache_map;
 
 /* Initializes the inode module. */
 void
@@ -72,7 +71,19 @@ inode_init (void)
 {
   list_init (&open_inodes);
   list_init (&buffer_cache);
-  lock_init (&buffer_lock);
+  buffer_cache_map = bitmap_create(BUFFER_CACHE_SIZE);
+  int i;
+  for (i = 0; i < BUFFER_CACHE_SIZE; i++)
+  {
+    struct buffer_cache_entry *c = (struct buffer_cache_entry*) malloc(sizeof(struct buffer_cache_entry));
+    c->empty = true;
+    c->idx = NULL;
+    c->accessed = false;
+    c->dirty = false;
+    c->data = malloc(DISK_SECTOR_SIZE);
+    list_push_back(&buffer_cache, &c->elem);
+    // printf("Added entry %d of idx %s at mem of %p, elem: %p\n", i, c->idx == NULL ? "NULL" : "error", c, c->elem);
+  }
 }
 
 /* Initializes an inode with LENGTH bytes of data and
@@ -212,19 +223,25 @@ check_cache (disk_sector_t idx)
 {
   struct list_elem *e;
   struct buffer_cache_entry *c;
+  int i = -1;
 
-  lock_acquire (&buffer_lock);
+  // printf("Bitmap status: size %d\n", bitmap_scan(buffer_cache_map, 0, 1, false));
   for (e = list_begin(&buffer_cache); e != list_end(&buffer_cache); e = list_next(e))
   {
+    i++;
     c = list_entry(e, struct buffer_cache_entry, elem);
+    if (c->empty == true)
+    {
+    // printf("passing empty cache %d of mempos %p, elem: %p\n", i, c, c->elem);
+      continue;
+    }
     if (c->idx == idx)
     {
-      lock_release (&buffer_lock);
       return c;
     }
+    // printf("passing used cache %d of idx %d\n", i, c->idx == NULL ? -1 : c->idx);
   }
 
-  lock_release (&buffer_lock);
   return NULL;
 }
 
@@ -233,73 +250,56 @@ check_cache (disk_sector_t idx)
 bool
 fetch_sector (disk_sector_t idx)
 {
-  struct buffer_cache_entry *c = (struct buffer_cache_entry*) malloc(sizeof(struct buffer_cache_entry));
+  // printf("Fetching sector of %d\n", idx);
+  // struct buffer_cache_entry *c = (struct buffer_cache_entry*) malloc(sizeof(struct buffer_cache_entry));
+  int empty_cache_pos = bitmap_scan_and_flip(buffer_cache_map, 0, 1, false);
+  struct buffer_cache_entry *c;
+  struct list_elem *e;
+  int i = 0;
   if (buffer_cache_cnt < BUFFER_CACHE_SIZE)
   {
+    for (e = list_begin(&buffer_cache); i < BUFFER_CACHE_SIZE && e != list_end(&buffer_cache); e = list_next(e))
+    {
+      // printf("i: %d, mempos of elem %p, elem->next %p\n", i, e, e->next);
+      if (i == empty_cache_pos)
+      {
+        c = list_entry(e, struct buffer_cache_entry, elem);
+        // printf("mempos of bufcache %p\n", c);
+        if (c->empty == false)
+          return false;
+        // printf("Got empty buffer_cache_entry\n");
+        break;
+      }
+      // printf("iterating...\n");
+      i++;
+    }
     c->idx = idx;
     c->accessed = false;
     c->dirty = false;
+    c->empty = false;
+    // printf("before reading, check of elem: %p\n", c->elem);
     disk_read(filesys_disk, idx, c->data);
-    list_push_back(&buffer_cache, &c->elem);
+    // printf("i: %d, Read data into %p, check of elem: %p elem->next: %p\n", i, c->data, c->elem, &c->elem.next);
+    // list_push_back(&buffer_cache, &c->elem);
     buffer_cache_cnt++;
     
     return true;
   }
   else
   {
-    if (evict_sector (pick_entry_to_evict())) 
-      return fetch_sector (idx);
-    else
-      return false;
+    // TODO: select which sector to evict
+    
+    evict_sector (1); 
+    return fetch_sector (idx);
   }
+  return false;
 }
 
 /* Evicts sector from buffer_cache_list */
 bool
 evict_sector (disk_sector_t idx)
 {
-  struct list_elem *e;
-  struct buffer_cache_entry *c;
 
-  lock_acquire (&buffer_lock);
-  for (e = list_begin(&buffer_cache); e != list_end(&buffer_cache); e = list_next(&buffer_cache))
-  {
-    c = list_entry(e, struct buffer_cache_entry, elem);
-    if (c->idx == idx)
-    {
-      list_remove (e);
-      free (c);
-
-      lock_release (&buffer_lock);
-      return true;
-    }
-  }
-
-  lock_release (&buffer_lock);
-  return false;
-}
-
-/* Select which sector to evict from buffer cache. */
-disk_sector_t
-pick_entry_to_evict ()
-{
-  // TODO: select using clock algorithm
-
-  // Temporarily select random one
-  int len = list_size (&buffer_cache);
-  int random = timer_ticks() % len;
-
-  struct list_elem *e;
-  struct buffer_cache_entry *c;
-  int i = 0;
-  for (e = list_begin (&buffer_cache); e != list_end (&buffer_cache); e = list_next(e))
-  {
-    if (i == random)
-    {
-      c = list_entry(e, struct buffer_cache_entry, elem);
-      return c->idx;
-    }
-  }
 }
 
 /* Fetch SIZE bytes from cache into BUFFER from OFFSET.
