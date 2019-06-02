@@ -11,6 +11,7 @@
 #include "threads/synch.h"
 #include "threads/thread.h"
 #include "devices/timer.h"
+#include "threads/interrupt.h"
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
@@ -72,6 +73,7 @@ static struct bitmap *buffer_cache_map;
 static struct lock evict_lock;
 
 static struct lock buffer_lock;
+static struct semaphore write_behind_lock;
 
 /* Initializes the inode module. */
 void
@@ -81,6 +83,7 @@ inode_init (void)
   list_init (&buffer_cache);
   lock_init (&evict_lock);
   lock_init (&buffer_lock);
+  sema_init (&write_behind_lock, 0);
   buffer_cache_map = bitmap_create(BUFFER_CACHE_SIZE);
   int i;
   for (i = 0; i < BUFFER_CACHE_SIZE; i++)
@@ -94,6 +97,7 @@ inode_init (void)
     list_push_back(&buffer_cache, &c->elem);
     // printf("Added entry %d of idx %s at mem of %p, elem: %p\n", i, c->idx == NULL ? "NULL" : "error", c, c->elem);
   }
+  // write_dirty_inodes();
 }
 
 /* Initializes an inode with LENGTH bytes of data and
@@ -265,15 +269,16 @@ write_behind_helper(struct thread *parent)
 void 
 write_dirty_inodes ()
 {
-  if (thread_current()->parent->kill_child)
-  {
-    thread_exit();
-  }
-  timer_sleep(50);
+  struct list *cache_tmp_pointer = &buffer_cache;
+  // if (thread_current()->parent->kill_child)
+  // {
+  //   sema_up(&write_behind_lock);
+  //   thread_exit();
+  // }
+  printf("writing dirty inodes\n");
   struct list_elem *e;
   struct buffer_cache_entry *c;
-  lock_acquire (&buffer_lock);
-  for (e = list_begin (&buffer_cache); e != list_end (&buffer_cache); e = list_next(e))
+  for (e = list_begin (cache_tmp_pointer); e != list_end (cache_tmp_pointer); e = list_next(e))
   {
     c = list_entry (e, struct buffer_cache_entry, elem);
     if (c->dirty)
@@ -282,7 +287,6 @@ write_dirty_inodes ()
       c->dirty = false;
     }
   }
-  lock_release (&buffer_lock);
 }
 
 /* Free buffer cache. */

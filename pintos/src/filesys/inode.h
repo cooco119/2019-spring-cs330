@@ -6,6 +6,7 @@
 #include "devices/disk.h"
 #include <list.h>
 #include "threads/thread.h"
+#include "threads/synch.h"
 
 struct bitmap;
 
@@ -18,6 +19,7 @@ struct buffer_cache_entry
   bool empty;
   struct list_elem elem;
 };
+static struct semaphore write_behind_lock;
 
 void inode_init (void);
 bool inode_create (disk_sector_t, off_t);

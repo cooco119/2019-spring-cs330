@@ -148,6 +148,14 @@ timer_interrupt (struct intr_frame *args UNUSED)
   ticks++;
   struct list_elem *e;
   struct thread *t;
+  struct thread *before;
+  enum intr_level old_level = intr_disable();
+  // for (e = list_begin(&block_list)->next; e != list_end(&block_list); e = list_next(e)){
+  //     t = list_entry (e, struct thread, elem);
+  //     before = list_entry (e->prev, struct thread, elem);
+  //     if (before->priority > t->priority)
+  //       t->block_end_tick = before->block_end_tick + 30;
+  //   }
   for (e = list_begin(&block_list); e != list_end(&block_list); )
   {
     t = list_entry(e, struct thread, elem);
@@ -161,6 +169,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
       e = list_next(e);
     }
   }
+  intr_set_level(old_level);
   thread_tick ();
 }
 

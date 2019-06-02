@@ -30,7 +30,7 @@ filesys_init (bool format)
     do_format ();
 
   free_map_open ();
-  thread_create("write-behind", PRI_DEFAULT, write_behind_helper, thread_current());
+  // thread_create("write-behind", PRI_MAX, write_behind_helper, thread_current());
 }
 
 /* Shuts down the file system module, writing any unwritten data
@@ -39,7 +39,8 @@ void
 filesys_done (void) 
 {
   free_map_close ();
-  thread_current()->kill_child = true;
+  // thread_current()->kill_child = true;
+  // sema_down(&write_behind_lock);
   free_buffer_cache();
 }
 
