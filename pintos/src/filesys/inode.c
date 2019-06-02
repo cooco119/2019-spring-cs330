@@ -75,6 +75,7 @@ byte_to_sector (const struct inode *inode, off_t pos)
   ASSERT (inode != NULL);
   // ASSERT (inode != inode_open(FREE_MAP_SECTOR));
   int pointer_pos;
+  int dbl_pointer_pos;
   disk_sector_t result;
   disk_sector_t target;
 
@@ -133,23 +134,27 @@ byte_to_sector (const struct inode *inode, off_t pos)
             target = ib->pointers[pointer_pos];
           }
           // printf("Indirect pointer #%d, sector %d\n", pointer_pos, ib->pointers[pointer_pos]);
+          if (!commit_cache(inode->data.indirect, ib, DISK_SECTOR_SIZE, 0))
+          {
+            // printf("Commit in byte_to_sector failed. [At sector %d]\n", inode->sector);
+          }
           result = target;
         }
         else
           result = -1;
 
-        if (inode->sector == 4)
+        if (inode->data.indirect == 119)
         {
-          // printf("\t\t\t\t\tSecond direct: %d\n", inode->data.direct_pointers[1]);
+          // printf("\t\t\t\t\tSecond indirect: %d\n", ib->pointers[1]);
         }
         if (!commit_cache(inode->sector, &inode->data, DISK_SECTOR_SIZE, 0))
         {
           // printf("Commit in byte_to_sector failed. [At sector %d]\n", inode->sector);
         }
-        if (!commit_cache(inode->data.indirect, ib, DISK_SECTOR_SIZE, 0))
-        {
-          // printf("Commit in byte_to_sector failed. [At sector %d]\n", inode->sector);
-        }
+        // if (!commit_cache(inode->data.indirect, ib, DISK_SECTOR_SIZE, 0))
+        // {
+        //   printf("Commit in byte_to_sector failed. [At sector %d]\n", inode->sector);
+        // }
         free(ib);
         return result;
       }
@@ -182,6 +187,8 @@ byte_to_sector (const struct inode *inode, off_t pos)
               return -1;
             }
           }
+          // printf("Doubly indirect pointer #%d, sector %d\n", pointer_pos, double_ib->pointers[pointer_pos]);
+          dbl_pointer_pos = pointer_pos;
           if (fetch_cache(double_ib->pointers[pointer_pos], ib, DISK_SECTOR_SIZE, 0, 0))
           {
             pointer_pos = (pos - INDIRECT_POINTER_REGION) / DISK_SECTOR_SIZE - INDIRECT_BLOCK_SIZE * pointer_pos;
@@ -196,6 +203,7 @@ byte_to_sector (const struct inode *inode, off_t pos)
               }
               target = ib->pointers[pointer_pos];
             }
+            // printf("Doubly indirect pointer-> indirect #%d, sector %d\n", pointer_pos, ib->pointers[pointer_pos]);
             result = target;
           }
           else
@@ -212,7 +220,7 @@ byte_to_sector (const struct inode *inode, off_t pos)
         {
           // printf("Commit in byte_to_sector failed. [At sector %d]\n", inode->sector);
         }
-        if (!commit_cache(inode->data.indirect, ib, DISK_SECTOR_SIZE, 0))
+        if (!commit_cache(double_ib->pointers[dbl_pointer_pos], ib, DISK_SECTOR_SIZE, 0))
         {
           // printf("Commit in byte_to_sector failed. [At sector %d]\n", inode->sector);
         }
@@ -343,7 +351,7 @@ inode_open (disk_sector_t sector)
   struct list_elem *e;
   struct inode *inode;
 
-  write_dirty_inodes();
+  // write_dirty_inodes();
 
   /* Check whether this inode is already open. */
   for (e = list_begin (&open_inodes); e != list_end (&open_inodes);
@@ -496,7 +504,16 @@ write_dirty_inodes ()
     {
       disk_write (filesys_disk, c->idx, c->data);
       c->dirty = false;
+      // printf("Written dirty idx %d\n", c->idx);
     }
+    // if (c->idx == 106)
+    // {
+    //   // printf("second direct: %d\n", ((struct inode*)c->data)->data.direct_pointers[1]);
+    // }
+    // if (c->idx == 119)
+    // {
+      // printf("second indirect: %d\n", ((struct indirect_block*)c->data)->pointers[1]);
+    // }
   }
 }
 
@@ -617,6 +634,7 @@ evict_sector (disk_sector_t idx)
     }
     i++;
   }
+  // write_dirty_inodes();
 
   lock_release (&evict_lock);
   return false;
@@ -662,6 +680,7 @@ commit_cache (disk_sector_t idx, void *buffer_, off_t size, off_t offset)
   {
     cache_entry->accessed = true;
     memcpy (cache_entry->data + offset, buffer, size);
+    // printf("Successfully commit data in cache of sector %d\n", idx);
     // if (idx == 0)
     // {
     //   hex_dump(buffer, buffer, 32, 0);
@@ -782,6 +801,8 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       bytes_written += chunk_size;
     }
 
+  // write_dirty_inodes();
+
   return bytes_written;
 }
 
@@ -801,7 +822,6 @@ void
 inode_allow_write (struct inode *inode) 
 {
   ASSERT (inode->deny_write_cnt > 0);
-  printf("deny: %d, open: %d\n", inode->deny_write_cnt, inode->open_cnt);
   ASSERT (inode->deny_write_cnt <= inode->open_cnt);
   inode->deny_write_cnt--;
 }
