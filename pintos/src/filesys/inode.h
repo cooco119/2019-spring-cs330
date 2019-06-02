@@ -5,6 +5,7 @@
 #include "filesys/off_t.h"
 #include "devices/disk.h"
 #include <list.h>
+#include "threads/thread.h"
 
 struct bitmap;
 
@@ -25,11 +26,13 @@ struct inode *inode_reopen (struct inode *);
 disk_sector_t inode_get_inumber (const struct inode *);
 void inode_close (struct inode *);
 void inode_remove (struct inode *);
+void write_behind_helper(struct thread *);
+void write_dirty_inodes ();
+void free_buffer_cache ();
 struct buffer_cache_entry * check_cache (disk_sector_t idx);
 bool fetch_sector (disk_sector_t idx);
 bool evict_sector (disk_sector_t idx);
 bool fetch_cache (disk_sector_t idx, void *buffer_, off_t size, off_t origin_ofs, off_t target_ofs);
-// bool fetch_cache (disk_sector_t idx, void *buffer_, off_t size, off_t offset);
 off_t inode_read_at (struct inode *, void *, off_t size, off_t offset);
 off_t inode_write_at (struct inode *, const void *, off_t size, off_t offset);
 void inode_deny_write (struct inode *);

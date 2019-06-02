@@ -7,6 +7,7 @@
 #include "threads/io.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include <list.h>
   
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -28,6 +29,7 @@ static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
+static struct list block_list;
 
 /* Sets up the 8254 Programmable Interval Timer (PIT) to
    interrupt PIT_FREQ times per second, and registers the
@@ -44,6 +46,7 @@ timer_init (void)
   outb (0x40, count >> 8);
 
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+  list_init(&block_list);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -99,8 +102,15 @@ timer_sleep (int64_t ticks)
   int64_t start = timer_ticks ();
 
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+  // while (timer_elapsed (start) < ticks) 
+  //   thread_yield ();
+  enum intr_level old_level;
+  old_level = intr_disable();
+  struct thread *t = thread_current();
+  t->block_end_tick = start + ticks;
+  list_push_back(&block_list, &t->elem);
+  thread_block();
+  intr_set_level(old_level);
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -136,6 +146,21 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
+  struct list_elem *e;
+  struct thread *t;
+  for (e = list_begin(&block_list); e != list_end(&block_list); )
+  {
+    t = list_entry(e, struct thread, elem);
+    if (t->block_end_tick <= ticks)
+    {
+      e = list_remove(e);
+      thread_unblock(t);
+    }
+    else
+    {
+      e = list_next(e);
+    }
+  }
   thread_tick ();
 }
 

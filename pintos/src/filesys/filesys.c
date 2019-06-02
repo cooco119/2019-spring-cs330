@@ -7,6 +7,7 @@
 #include "filesys/inode.h"
 #include "filesys/directory.h"
 #include "devices/disk.h"
+#include "threads/thread.h"
 
 /* The disk that contains the file system. */
 struct disk *filesys_disk;
@@ -29,6 +30,7 @@ filesys_init (bool format)
     do_format ();
 
   free_map_open ();
+  thread_create("write-behind", PRI_DEFAULT, write_behind_helper, thread_current());
 }
 
 /* Shuts down the file system module, writing any unwritten data
@@ -37,6 +39,8 @@ void
 filesys_done (void) 
 {
   free_map_close ();
+  thread_current()->kill_child = true;
+  free_buffer_cache();
 }
 
 /* Creates a file named NAME with the given INITIAL_SIZE.
