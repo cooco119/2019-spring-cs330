@@ -107,7 +107,7 @@ byte_to_sector (const struct inode *inode, off_t pos)
           }
         }
 
-        if (fetch_cache(inode->data.indirect, ib, DISK_SECTOR_SIZE, 0))
+        if (fetch_cache(inode->data.indirect, ib, DISK_SECTOR_SIZE, 0, 0))
         {
           pointer_pos = (pos - DIRECT_POINTER_REGION) / DISK_SECTOR_SIZE;
           target = ib->pointers[pointer_pos];
@@ -145,7 +145,7 @@ byte_to_sector (const struct inode *inode, off_t pos)
           }
         }
 
-        if (fetch_cache(inode->data.doubly_indirect, double_ib, DISK_SECTOR_SIZE, 0)) 
+        if (fetch_cache(inode->data.doubly_indirect, double_ib, DISK_SECTOR_SIZE, 0, 0)) 
         {
           pointer_pos = (pos - INDIRECT_POINTER_REGION) / DISK_SECTOR_SIZE / INDIRECT_BLOCK_SIZE;
           if (double_ib->pointers[pointer_pos] == NULL)
@@ -157,7 +157,7 @@ byte_to_sector (const struct inode *inode, off_t pos)
               return -1;
             }
           }
-          if (fetch_cache(double_ib->pointers[pointer_pos], ib, DISK_SECTOR_SIZE, 0))
+          if (fetch_cache(double_ib->pointers[pointer_pos], ib, DISK_SECTOR_SIZE, 0, 0))
           {
             pointer_pos = (pos - INDIRECT_POINTER_REGION) / DISK_SECTOR_SIZE - INDIRECT_BLOCK_SIZE * pointer_pos;
             target = ib->pointers[pointer_pos];
