@@ -87,7 +87,7 @@ filesys_create (const char *name, off_t initial_size, bool is_dir)
                 success = success  && free_map_allocate (1, &inode_sector);
                 // printf("created inode at %d\n", inode_sector);
                 // printf("create : freemap alloc %s\n", success ? "success" : "failed");
-                success = success  && inode_create (inode_sector, initial_size);
+                success = success  && inode_create (inode_sector, initial_size, is_dir);
                 // printf("create : inode_create %s\n", success ? "success" : "failed");
                 success = success  && dir_add (dir, passing_name, inode_sector, is_dir);
                 // printf("create : dir_add %s\n", success ? "success" : "failed");
@@ -146,6 +146,50 @@ filesys_open (const char *name)
   dir_close (dir);
 
   return file_open (inode);
+}
+
+struct dir *
+filesys_open_dir (const char *name)
+{
+  /* TODO
+  
+    This is only for absolute path,
+    Should support relative path (start with . or ..)
+    Pass name starting without / or . or ..
+  */
+  struct dir *dir;  
+
+  char *passing_name;
+  size_t token_len = 0;
+  char *token, *save_ptr = malloc(sizeof(char));
+
+  token = strtok_r (name, "/", &save_ptr);
+  if (token == ".")
+  {
+    dir = thread_current()->current_directory;
+  }
+  else if (token == "..")
+  {
+    dir = thread_current()->parent_directory;
+  }
+  else // start with / or nothing
+  {
+    dir = dir_open_root();
+  }
+
+  /* pass parsed name */
+  if (token_len != NULL)
+    token_len = strlen(token);
+  passing_name = name;
+  if (token_len < strlen(name) && token_len != 0)
+    passing_name = name + token_len;
+
+  struct inode *inode = NULL;
+
+  if (dir != NULL)
+    dir_lookup (dir, passing_name, &inode);
+
+  return dir_open (inode);
 }
 
 /* Deletes the file named NAME.

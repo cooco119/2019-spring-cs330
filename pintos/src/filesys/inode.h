@@ -23,7 +23,8 @@ struct inode_disk
     disk_sector_t direct_pointers[12];
     disk_sector_t indirect;
     disk_sector_t doubly_indirect;
-    uint32_t unused[112];               /* Not used. */
+    bool is_dir;
+    uint32_t unused[111];               /* Not used. */
   };
 
 struct inode 
@@ -49,7 +50,7 @@ struct buffer_cache_entry
 static struct semaphore write_behind_lock;
 
 void inode_init (void);
-bool inode_create (disk_sector_t, off_t);
+bool inode_create (disk_sector_t, off_t, bool is_dir);
 struct inode *inode_open (disk_sector_t);
 struct inode *inode_reopen (struct inode *);
 disk_sector_t inode_get_inumber (const struct inode *);

@@ -29,6 +29,11 @@ int write (int fd, const void *buffer, unsigned size);
 void seek (int fd, unsigned position);
 unsigned tell (int fd);
 void close (int fd);
+bool chdir (const char *dir);
+bool mkdir (const char *dir);
+bool readdir (int fd, char *name);
+bool isdir (int fd);
+int inumber (int fd);
 
 struct semaphore file_lock;
 
@@ -122,6 +127,36 @@ syscall_handler (struct intr_frame *f UNUSED)
         exit(-1);
       }
       close ((int) *(uint32_t*) (f->esp + 4));
+      break;
+    case SYS_CHDIR:
+      if (! is_user_vaddr(f->esp + 4)){
+        exit(-1);
+      }
+      f->eax = chdir ((char*) *(uint32_t*) (f->esp + 4));
+      break;
+    case SYS_MKDIR:
+      if (! is_user_vaddr(f->esp + 4)){
+        exit(-1);
+      }
+      f->eax = mkdir ((char*) *(uint32_t*) (f->esp + 4));
+      break;
+    case SYS_READDIR:
+      if (! is_user_vaddr(f->esp + 4) || ! is_user_vaddr(f->esp + 8)){
+        exit(-1);
+      }
+      f->eax = readdir ((int) *(uint32_t*) (f->esp + 4), (char*) *(uint32_t*) (f->esp + 8));
+      break;
+    case SYS_ISDIR:
+      if (! is_user_vaddr(f->esp + 4)){
+        exit(-1);
+      }
+      f->eax = isdir ((int) *(uint32_t*) (f->esp + 4));
+      break;
+    case SYS_INUMBER:
+      if (! is_user_vaddr(f->esp + 4)){
+        exit(-1);
+      }
+      f->eax = inumber((int) *(uint32_t*) (f->esp + 4));
       break;
     default:
       break; 
@@ -236,6 +271,18 @@ int write (int fd, const void *buffer, unsigned size) {
   int STDOUT = 1;
 
   sema_down(&file_lock);
+
+  struct file *f = thread_current()->files[fd];
+  if (f == NULL)
+  {
+    sema_up(&file_lock);
+    return -1;
+  }
+  if (f->inode->data.is_dir)
+  {
+    sema_up(&file_lock);
+    return -1;    
+  }
   if (fd == STDOUT) {
     putbuf (buffer, size);
     sema_up(&file_lock);
@@ -261,4 +308,109 @@ unsigned tell (int fd) {
 void close (int fd){
   file_close(thread_current()->files[fd]);
   thread_current()->files[fd] = NULL;
+}
+
+bool chdir (const char *dir)
+{
+  sema_down(&file_lock);
+  struct dir *directory = filesys_open_dir(dir);
+  if (directory == NULL)
+  {
+    sema_up(&file_lock);
+    return false;
+  }
+  dir_close(thread_current()->current_directory);
+  thread_current()->current_directory = directory;
+  sema_up(&file_lock);
+
+  return true;
+}
+
+bool mkdir (const char *dir)
+{
+  bool res;
+  sema_down(&file_lock);
+  res = filesys_create(dir, 0, true);
+  sema_up(&file_lock);
+  return res;
+}
+
+bool readdir (int fd, char *name)
+{
+  bool res;
+  sema_down(&file_lock);
+  struct file *f = thread_current()->files[fd];
+  if (f == NULL)
+  {
+    sema_up(&file_lock);
+    return false;
+  }
+  struct inode *inode = f->inode;
+  if (inode == NULL)
+  {
+    sema_up(&file_lock);
+    return false;
+  }
+  if (!inode->data.is_dir) 
+  {
+    sema_up(&file_lock);
+    return false;
+  }
+  struct dir *dir = dir_open(inode);
+  if (dir == NULL)
+  {
+    sema_up(&file_lock);
+    return false;
+  }
+  res = dir_readdir(dir, name);
+  sema_up(&file_lock);
+
+  return res;
+
+}
+
+bool isdir (int fd)
+{
+  sema_down(&file_lock);
+  struct file *f = thread_current()->files[fd];
+  if (f == NULL)
+  {
+    sema_up(&file_lock);
+    return false;
+  }
+  struct inode *inode = f->inode;
+  if (inode == NULL)
+  {
+    sema_up(&file_lock);
+    return false;
+  }
+  if (!inode->data.is_dir) 
+  {
+    sema_up(&file_lock);
+    return false;
+  }
+
+  return true;
+}
+
+int inumber (int fd)
+{
+  int res;
+  sema_down(&file_lock);
+  struct file *f = thread_current()->files[fd];
+  if (f == NULL)
+  {
+    sema_up(&file_lock);
+    return false;
+  }
+  struct inode *inode = f->inode;
+  if (inode == NULL)
+  {
+    sema_up(&file_lock);
+    return false;
+  }
+  res = inode->sector;
+  sema_up(&file_lock);
+
+  return res;
 }
