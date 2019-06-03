@@ -19,6 +19,7 @@ struct dir_entry
     disk_sector_t inode_sector;         /* Sector number of header. */
     char name[NAME_MAX + 1];            /* Null terminated file name. */
     bool in_use;                        /* In use or free? */
+    bool is_dir;
   };
 
 /* Creates a directory with space for ENTRY_CNT entries in the
@@ -125,12 +126,57 @@ dir_lookup (const struct dir *dir, const char *name,
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
 
-  if (lookup (dir, name, &e, NULL)){
-    // printf("opening %d inode\n", e.inode_sector);
-    *inode = inode_open (e.inode_sector);
+  /*
+    TODO: 
+
+    1. parse name into subdirectories,
+    2. recursively (or iterate through) lookup subdirectories,
+    3. if subdirectory or file not found, return false
+    4. if final target file found, return true
+    5. else, proceed.
+   */
+
+  int path_len = 0;
+  char *token, *save_ptr = malloc(sizeof(char));
+  char **path_arr = (char **) malloc(sizeof(char *) * 20);
+
+  for (token = strtok_r (name, "/", &save_ptr); token != NULL;
+      token = strtok_r (NULL, "/", &save_ptr))
+  {
+    path_arr[path_len] = token;
+    path_len++;
   }
-  else
-    *inode = NULL;
+
+  int i;
+  struct dir *sub_dir = dir;
+  struct inode *tmp_inode;
+  off_t ofs;
+  for (i = 0; i < path_len; i++)
+  {
+    if (lookup (sub_dir, path_arr[i], &e, &ofs)){
+      tmp_inode = inode_open(e.inode_sector);
+      if (e.is_dir)
+      {
+        sub_dir = dir_open(tmp_inode);
+      }
+      else
+      {
+        *inode = tmp_inode;
+        break;   
+      }
+    }
+    else
+    {
+      *inode = NULL;
+    }
+  }
+
+  // if (lookup (dir, name, &e, NULL)){
+  //   // printf("opening %d inode\n", e.inode_sector);
+  //   *inode = inode_open (e.inode_sector);
+  // }
+  // else
+  //   *inode = NULL;
 
   return *inode != NULL;
 }
@@ -142,7 +188,7 @@ dir_lookup (const struct dir *dir, const char *name,
    Fails if NAME is invalid (i.e. too long) or a disk or memory
    error occurs. */
 bool
-dir_add (struct dir *dir, const char *name, disk_sector_t inode_sector) 
+dir_add (struct dir *dir, const char *name, disk_sector_t inode_sector, bool is_dir) 
 {
   struct dir_entry e;
   off_t ofs;
@@ -154,6 +200,50 @@ dir_add (struct dir *dir, const char *name, disk_sector_t inode_sector)
   /* Check NAME for validity. */
   if (*name == '\0' || strlen (name) > NAME_MAX)
     return false;
+
+  /* If name is path, change directory into leaf.
+     if failes, return false. */
+     
+  int path_len = 0;
+  char *token, *save_ptr = malloc(sizeof(char));
+  char **path_arr = (char **) malloc(sizeof(char *) * 20);
+
+  for (token = strtok_r (name, "/", &save_ptr); token != NULL;
+      token = strtok_r (NULL, "/", &save_ptr))
+  {
+    path_arr[path_len] = token;
+    path_len++;
+    // printf("Token parsed : %s\n", token);
+  }
+
+  if (path_len > 1)
+  {
+    // printf("Path length > 1\n");
+    int i;
+    struct dir *sub_dir = dir;
+    struct inode *tmp_inode;
+    off_t ofs;
+    for (i = 0; i < path_len - 1; i++)
+    {
+      if (lookup (sub_dir, path_arr[i], &e, &ofs)){
+        tmp_inode = inode_open(e.inode_sector);
+        if (e.is_dir)
+        {
+          sub_dir = dir_open(tmp_inode);
+        }
+        else
+        {
+          goto done;
+        }
+      }
+      else
+      {
+        goto done;
+      }
+    }
+    dir = sub_dir;
+  }
+  
 
   /* Check that NAME is not in use. */
   if (lookup (dir, name, NULL, NULL))
@@ -173,6 +263,7 @@ dir_add (struct dir *dir, const char *name, disk_sector_t inode_sector)
 
   /* Write slot. */
   e.in_use = true;
+  e.is_dir = is_dir;
   strlcpy (e.name, name, sizeof e.name);
   e.inode_sector = inode_sector;
   success = inode_write_at (dir->inode, &e, sizeof e, ofs) == sizeof e;

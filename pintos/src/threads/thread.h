@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "synch.h"
+#include "filesys/directory.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -101,6 +102,8 @@ struct thread
     int64_t block_end_tick;
     struct list_elem all;
     bool kill_child;
+    struct dir *current_directory;
+    struct dir *parent_directory;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */

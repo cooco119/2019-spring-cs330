@@ -98,6 +98,10 @@ start_process (void *f_name)
   // printf("Acquireing child lock of %s\n", thread_current()->name);
   // lock_acquire(&thread_current()->child_lock);
 
+  /* Setup cur & parent directory from those of parent's */
+  thread_current()->current_directory = thread_current()->parent->current_directory;
+  thread_current()->parent_directory = thread_current()->parent->parent_directory;
+
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;

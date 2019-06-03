@@ -13,6 +13,7 @@
 #include "threads/vaddr.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "filesys/directory.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -461,6 +462,10 @@ init_thread (struct thread *t, const char *name, int priority)
   list_push_back(&running_thread()->list_child, &(t->elem_child));
   running_thread()->child = t;
   t->parent = running_thread();
+
+  /* Set current & parent directory initially with root & NULL */
+  t->current_directory = NULL;
+  t->parent_directory = NULL;
 
 }
 
