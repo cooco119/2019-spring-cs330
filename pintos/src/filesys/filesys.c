@@ -50,17 +50,25 @@ filesys_done (void)
    Fails if a file named NAME already exists,
    or if internal memory allocation fails. */
 bool
-filesys_create (const char *name, off_t initial_size, bool is_dir) 
+filesys_create (char *name, off_t initial_size, bool is_dir) 
 {
   disk_sector_t inode_sector = 0;
   
   struct dir *dir;  
 
+  char *name_cpy = malloc(sizeof (char) * strlen(name) + 1);
+  strlcpy(name_cpy, name, strlen(name) + 1);
   char *passing_name;
   size_t token_len;
-  char *token, *save_ptr = malloc(sizeof(char));
+  char *token, *save_ptr;
+  // printf("name: %s, is_dir: %s, debug: %p\n", name, is_dir ? "true" : "false", token);
+  // if (strcmp(name, "a/b") == 0){
+  //   passing_name[1] = '\0';
+  //   printf("name change : %s\n", passing_name);
+  // }
 
-  token = strtok_r (name, "/", &save_ptr);
+  token = strtok_r (name_cpy, "/", &save_ptr);
+  // printf("hello\n");
   if (token == ".")
   {
     dir = thread_current()->current_directory;
@@ -76,11 +84,10 @@ filesys_create (const char *name, off_t initial_size, bool is_dir)
   }
 
   /* pass parsed name */
-  token_len = strlen(token);
-  passing_name = name;
-  if (token_len < strlen(name) && token_len != 0)
-    passing_name = name + token_len;
-  // printf("tokenLen: %d, passing name: %s, original name: %s\n", token_len, passing_name, name);
+  passing_name = name_cpy;
+  if (strlen(save_ptr) != 0)
+    passing_name = save_ptr;
+  // printf("passing name: %s, original name: %s\n", passing_name, name_cpy);
 
   bool success = (dir != NULL);
                 // printf("create : dir %s\n", success ? "success" : "failed");
@@ -94,6 +101,8 @@ filesys_create (const char *name, off_t initial_size, bool is_dir)
   if (!success && inode_sector != 0) 
     free_map_release (inode_sector, 1);
   dir_close (dir);
+
+  free(name_cpy);
 
   return success;
 }
@@ -114,30 +123,75 @@ filesys_open (const char *name)
   */
   struct dir *dir;  
 
+  char *name_cpy = malloc(sizeof (char) * strlen(name) + 1);
+  strlcpy(name_cpy, name, strlen(name) + 1);
   char *passing_name;
-  size_t token_len = 0;
-  char *token, *save_ptr = malloc(sizeof(char));
+  size_t token_len;
+  char *token, *save_ptr;
 
-  token = strtok_r (name, "/", &save_ptr);
+  token = strtok_r (name_cpy, "/", &save_ptr);
+  // printf("token %s\n", token);
+
+  // if (name_cpy[0] == '/')
+  // {
+  //   dir = dir_open_root();
+  //   if (strlen(save_ptr) == 0)
+  //   {
+  //     return file_open(dir_get_inode(dir) );
+  //   }
+  // }
+  // else
+  // {
+  //   if (thread_current()->current_directory == NULL)
+  //     dir = dir_open_root();
+  //   else
+  //   {
+  //     dir = dir_reopen(thread_current()->current_directory);
+  //     if (strlen(save_ptr) == 0)
+  //     {
+  //       return file_open(dir_get_inode(dir) );
+  //     }
+  //   }
+    
+  // }
+  
+
   if (token == ".")
   {
+    // printf("curr directory\n");
     dir = thread_current()->current_directory;
+    if (strlen(save_ptr) == 0)
+      return file_open(dir_get_inode(dir));
   }
   else if (token == "..")
   {
     dir = thread_current()->parent_directory;
+    if (strlen(save_ptr) == 0)
+      return file_open(dir_get_inode(dir));
+  }
+  else if (name_cpy[0] == '.' && thread_current()->current_directory != NULL)
+  {
+    dir = dir_reopen (thread_current()->current_directory);
+    if (strlen(save_ptr) == 0)
+    {
+      return file_open(dir_get_inode(dir) );
+    }
   }
   else // start with / or nothing
   {
+    // printf("Opening root dir\n");
     dir = dir_open_root();
+  }
+  
+  if (token == NULL)
+  {
+    return file_open(dir_get_inode(dir) );
   }
 
   /* pass parsed name */
-  if (token_len != NULL)
-    token_len = strlen(token);
-  passing_name = name;
-  if (token_len < strlen(name) && token_len != 0)
-    passing_name = name + token_len;
+  passing_name = name_cpy;
+  if (strlen(save_ptr) != 0)
+    passing_name = save_ptr;
 
   struct inode *inode = NULL;
 
@@ -175,6 +229,11 @@ filesys_open_dir (const char *name)
   else // start with / or nothing
   {
     dir = dir_open_root();
+  }
+
+  if (token == NULL)
+  {
+    return file_open(dir_get_inode(dir) );
   }
 
   /* pass parsed name */

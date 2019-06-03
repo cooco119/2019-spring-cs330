@@ -272,23 +272,24 @@ int write (int fd, const void *buffer, unsigned size) {
 
   sema_down(&file_lock);
 
-  struct file *f = thread_current()->files[fd];
-  if (f == NULL)
-  {
-    sema_up(&file_lock);
-    return -1;
-  }
-  if (f->inode->data.is_dir)
-  {
-    sema_up(&file_lock);
-    return -1;    
-  }
+  
   if (fd == STDOUT) {
     putbuf (buffer, size);
     sema_up(&file_lock);
     return size;
   }
   else if (fd >= 3) {
+    struct file *f = thread_current()->files[fd];
+    if (f == NULL)
+    {
+      sema_up(&file_lock);
+      return -1;
+    }
+    if (f->inode->data.is_dir)
+    {
+      sema_up(&file_lock);
+      return -1;    
+    }
     sema_up(&file_lock);
     return file_write(thread_current()->files[fd], buffer, size);
   }
@@ -331,6 +332,7 @@ bool mkdir (const char *dir)
   bool res;
   sema_down(&file_lock);
   res = filesys_create(dir, 0, true);
+  // printf("res: %s\n", res ? "true" : "false");
   sema_up(&file_lock);
   return res;
 }
